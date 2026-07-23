@@ -12,8 +12,8 @@ android {
         applicationId = "com.letify.app"
         minSdk = 26
         targetSdk = 34
-        versionCode = 198
-        versionName = "r198-home-scale"
+        versionCode = 199
+        versionName = "r199-home-static"
         vectorDrawables { useSupportLibrary = true }
     }
 
