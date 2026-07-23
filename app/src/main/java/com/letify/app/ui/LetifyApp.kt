@@ -73,6 +73,7 @@ import com.letify.app.ui.state.TransitionStyle
 import com.letify.app.ui.theme.Letify
 import dev.chrisbanes.haze.HazeState
 import dev.chrisbanes.haze.haze
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 
 /**
@@ -167,43 +168,51 @@ fun LetifyApp() {
     var lastAction by remember { mutableStateOf("init") }
 
     // Camera opens as a simple full-screen slide-up from the bottom.
-    // No container-transform / expand morph — just a clean vertical slide
-    // + light scrim. Progress 0 = fully off-screen below, 1 = settled.
-    // `cameraVisible` keeps the screen composed through the close animation.
+    // Progress 0 = off-screen below, 1 = settled.
+    //
+    // Performance contract (why open/close no longer jank):
+    //  1. ONE cancellable Job owns the slide — tapping close mid-open cancels
+    //     the open job cleanly instead of running two animateTo on the same
+    //     Animatable and racing `cameraReady = true` after a cancelled open.
+    //  2. `cameraReady` stays false for the entire slide-in AND is dropped
+    //     IMMEDIATELY on close — so CameraCaptureScreen never mounts a
+    //     PreviewView / never calls bindToLifecycle while frames are moving.
+    //     SurfaceView + parent translation = classic jank; we avoid that by
+    //     keeping the surface off-screen during any translation.
+    //  3. ProcessCameraProvider is prewarmed at app start (and again on open)
+    //     so the HAL handshake is already done by the time we bind.
     val cameraScope = rememberCoroutineScope()
     val appContext = LocalContext.current
     var cameraVisible by remember { mutableStateOf(false) }
     val cameraProgress = remember { Animatable(0f) }
-    // Flips true only once the slide-up animation has fully settled.
-    // CameraCaptureScreen uses this to defer the actual (expensive,
-    // synchronous) CameraX bind until the animation is done, so the two
-    // never fight over the same frames.
     var cameraReady by remember { mutableStateOf(false) }
-    // Kick off ProcessCameraProvider.getInstance() as soon as the app is up
-    // (not when the user taps the camera button) so the HAL is already warm
-    // by the time it's actually needed — this is what removes the stutter
-    // right at the start of the slide-up.
+    var cameraAnimJob by remember { mutableStateOf<Job?>(null) }
     LaunchedEffect(Unit) { CameraPrewarm.warm(appContext) }
     val openCamera: () -> Unit = {
         CameraPrewarm.warm(appContext)
+        cameraAnimJob?.cancel()
         cameraReady = false
         cameraVisible = true
-        cameraScope.launch {
+        cameraAnimJob = cameraScope.launch {
             cameraProgress.animateTo(
                 1f,
                 animationSpec = tween(CameraSlideInMs, easing = CameraSlideEasing),
             )
+            // Final laid-out frame committed before any CameraX main-thread work.
             cameraReady = true
         }
     }
     val closeCamera: () -> Unit = {
-        cameraScope.launch {
+        cameraAnimJob?.cancel()
+        // Tear the surface down FIRST so the slide-out never transforms a live
+        // SurfaceView (that combination is what made mid-open close stutter).
+        cameraReady = false
+        cameraAnimJob = cameraScope.launch {
             cameraProgress.animateTo(
                 0f,
                 animationSpec = tween(CameraSlideOutMs, easing = CameraSlideEasing),
             )
             cameraVisible = false
-            cameraReady = false
         }
     }
     val overlay: AddOverlay? = overlayStack.lastOrNull()
@@ -495,7 +504,9 @@ fun LetifyApp() {
                             val p = cameraProgress.value.coerceIn(0f, 1f)
                             translationY = (1f - p) * size.height
                         }
-                        .clip(RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp)),
+                        // Mild top rounding — Telegram uses a soft sheet edge,
+                        // not the heavy 28dp card radius.
+                        .clip(RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp)),
                 ) {
                     CameraCaptureScreen(
                         onBack = closeCamera,

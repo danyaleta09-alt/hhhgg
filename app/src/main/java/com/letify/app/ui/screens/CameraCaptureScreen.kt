@@ -179,7 +179,18 @@ fun CameraCaptureScreen(
     var previewView by remember { mutableStateOf<PreviewView?>(null) }
     var bindGeneration by remember { mutableIntStateOf(0) }
 
-    // Bind once the slide has settled AND the PreviewView surface exists.
+    // When the host drops readyToBind (close started, or open cancelled mid-slide)
+    // clear the surface reference and snap alpha so the next open fades cleanly
+    // and DisposableEffect's onDispose can unbind without a live TextureView
+    // still being translated by the sheet.
+    LaunchedEffect(readyToBind) {
+        if (!readyToBind) {
+            previewView = null
+            previewAlpha.snapTo(0f)
+        }
+    }
+
+    // Bind only after the slide has settled AND the PreviewView exists.
     DisposableEffect(readyToBind, lensFacing, previewView, lifecycleOwner, bindGeneration, hasCamera) {
         val view = previewView
         if (!readyToBind || view == null || !hasCamera) {
@@ -188,6 +199,7 @@ fun CameraCaptureScreen(
             val mainExecutor = ContextCompat.getMainExecutor(context)
             val future = CameraPrewarm.future(context)
             var provider: ProcessCameraProvider? = null
+            var boundPreview: Preview? = null
             var cancelled = false
 
             future.addListener({
@@ -197,10 +209,12 @@ fun CameraCaptureScreen(
                     val preview = Preview.Builder().build().also { p ->
                         p.setSurfaceProvider(view.surfaceProvider)
                     }
+                    boundPreview = preview
                     val selector = CameraSelector.Builder()
                         .requireLensFacing(lensFacing)
                         .build()
                     provider?.unbindAll()
+                    if (cancelled) return@addListener
                     val cam = provider?.bindToLifecycle(
                         lifecycleOwner,
                         selector,
@@ -208,8 +222,12 @@ fun CameraCaptureScreen(
                         imageCapture,
                         videoCapture,
                     )
+                    if (cancelled) {
+                        // Close won the race — drop the bind we just did.
+                        try { provider?.unbindAll() } catch (_: Exception) {}
+                        return@addListener
+                    }
                     boundCamera = cam
-                    // Apply pending zoom / exposure if supported
                     cam?.cameraControl?.setZoomRatio(
                         zoomRatio.coerceIn(
                             cam.cameraInfo.zoomState.value?.minZoomRatio ?: 1f,
@@ -223,19 +241,18 @@ fun CameraCaptureScreen(
                             .coerceIn(range.lower, range.upper)
                         cam.cameraControl.setExposureCompensationIndex(idx)
                     }
-                    // Fade preview in after bind — animate up from wherever it
-                    // currently sits (0 on first open, the flip dip otherwise)
-                    // rather than snapping, so there's never a hard cut.
                     scope.launch {
-                        previewAlpha.animateTo(1f, tween(280))
+                        previewAlpha.animateTo(1f, tween(220))
                     }
                 } catch (e: Exception) {
-                    Log.e(TAG, "bind failed", e)
+                    if (!cancelled) Log.e(TAG, "bind failed", e)
                 }
             }, mainExecutor)
 
             onDispose {
                 cancelled = true
+                // Detach surface first (cheap), then unbind use-cases.
+                try { boundPreview?.setSurfaceProvider(null) } catch (_: Exception) {}
                 try { provider?.unbindAll() } catch (_: Exception) {}
                 boundCamera = null
             }
@@ -352,18 +369,29 @@ fun CameraCaptureScreen(
         }
     }
 
-    // Telegram-style layout: a rounded preview card that does NOT fill the
-    // whole screen, with a dedicated control bar (thumbnail / shutter /
-    // flip / hint) underneath it in the black area — not overlaid on top
-    // of the live feed.
-    Column(Modifier.fillMaxSize().background(Color.Black)) {
+    // Telegram-style layout: preview card sits BELOW the status bar with a
+    // small gap (not flush against the top edge), mild 14dp rounding, and a
+    // dedicated control bar underneath in the black area.
+    Column(
+        Modifier
+            .fillMaxSize()
+            .background(Color.Black)
+            .windowInsetsPadding(WindowInsets.statusBars),
+    ) {
         Box(
             Modifier
                 .weight(1f)
                 .fillMaxWidth()
-                .clip(RoundedCornerShape(28.dp)),
+                // Gap under the status bar so the card isn't glued to the top edge.
+                .padding(top = 8.dp)
+                .clip(RoundedCornerShape(14.dp)),
         ) {
-            if (hasCamera) {
+            // CRITICAL: do NOT inflate PreviewView until the slide has settled
+            // (`readyToBind`). A live SurfaceView/TextureView being translated
+            // by the parent sheet is the classic open/close jank source.
+            // While sliding we show a plain black plate; the real surface
+            // appears only after motion stops, then fades in via previewAlpha.
+            if (hasCamera && readyToBind) {
                 AndroidView(
                     factory = { ctx ->
                         PreviewView(ctx).apply {
@@ -372,7 +400,12 @@ fun CameraCaptureScreen(
                                 ViewGroup.LayoutParams.MATCH_PARENT,
                             )
                             scaleType = PreviewView.ScaleType.FILL_CENTER
-                            implementationMode = PreviewView.ImplementationMode.PERFORMANCE
+                            // COMPATIBLE = TextureView — tolerates a parent
+                            // transform if close is tapped the same frame the
+                            // surface appears. PERFORMANCE (SurfaceView) is
+                            // cheaper once settled but fights any residual
+                            // translation hard.
+                            implementationMode = PreviewView.ImplementationMode.COMPATIBLE
                         }.also { previewView = it }
                     },
                     modifier = Modifier
@@ -398,7 +431,7 @@ fun CameraCaptureScreen(
                 exit = fadeOut(tween(120)),
                 modifier = Modifier
                     .align(Alignment.TopCenter)
-                    .padding(top = 14.dp),
+                    .padding(top = 12.dp),
             ) {
                 Row(
                     Modifier
@@ -442,13 +475,13 @@ fun CameraCaptureScreen(
             }
 
             // Close — overlaid on the preview, top-left.
+            // Status-bar inset is already applied on the parent Column.
             NoFeedbackButton(
                 onClick = onBack,
                 modifier = Modifier
                     .align(Alignment.TopStart)
-                    .windowInsetsPadding(WindowInsets.statusBars)
-                    .padding(start = 16.dp, top = 12.dp)
-                    .size(44.dp),
+                    .padding(start = 12.dp, top = 10.dp)
+                    .size(40.dp),
             ) {
                 Box(
                     Modifier
@@ -456,7 +489,7 @@ fun CameraCaptureScreen(
                         .background(Color.Black.copy(alpha = 0.4f), CircleShape),
                     contentAlignment = Alignment.Center,
                 ) {
-                    SolarIcon(name = "alt-arrow-left-outline", tint = Color.White, size = 22.dp)
+                    SolarIcon(name = "alt-arrow-left-outline", tint = Color.White, size = 20.dp)
                 }
             }
         }
