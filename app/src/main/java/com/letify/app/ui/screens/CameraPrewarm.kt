@@ -3,6 +3,7 @@ package com.letify.app.ui.screens
 import android.content.Context
 import androidx.camera.core.ImageCapture
 import androidx.camera.lifecycle.ProcessCameraProvider
+import androidx.camera.video.FallbackStrategy
 import androidx.camera.video.Quality
 import androidx.camera.video.QualitySelector
 import androidx.camera.video.Recorder
@@ -60,9 +61,19 @@ object CameraPrewarm {
             .build()
     }
 
+    // A selector locked to a single Quality silently produces a broken/empty
+    // output file on any device (or lens — the front camera is a frequent
+    // offender) that doesn't support that exact profile. Give it a fallback
+    // chain so it always resolves to *something* recordable instead of
+    // failing quietly.
     val recorder: Recorder by lazy {
         Recorder.Builder()
-            .setQualitySelector(QualitySelector.from(Quality.SD))
+            .setQualitySelector(
+                QualitySelector.fromOrderedList(
+                    listOf(Quality.SD, Quality.LOWEST, Quality.HD),
+                    FallbackStrategy.lowerQualityOrHigherThan(Quality.SD),
+                ),
+            )
             .build()
     }
 

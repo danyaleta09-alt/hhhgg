@@ -36,9 +36,11 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBars
@@ -59,7 +61,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
@@ -145,15 +146,17 @@ fun CameraCaptureScreen(
     var lensFacing by remember { mutableIntStateOf(CameraSelector.LENS_FACING_BACK) }
     var isRecording by remember { mutableStateOf(false) }
     var captureBusy by remember { mutableStateOf(false) }
-    var flashAlpha by remember { mutableFloatStateOf(0f) }
+    // Shutter flash: a quick, soft pulse rather than a hard white blink —
+    // instant rise to a modest peak, then an eased fade back out.
+    val shutterFlash = remember { Animatable(0f) }
     var lastThumb by remember { mutableStateOf<String?>(null) }
+    // How many photos/videos were captured this time the camera was open.
+    var sessionCaptureCount by remember { mutableIntStateOf(0) }
     // Exposure compensation index (−range..+range); UI ready, applied on bind.
     var exposureBias by remember { mutableFloatStateOf(0f) }
     // Zoom ratio placeholder for future wide-angle toggle (1f = default).
     var zoomRatio by remember { mutableFloatStateOf(1f) }
     var recordSeconds by remember { mutableIntStateOf(0) }
-
-    val flashAnim by animateFloatAsState(flashAlpha, tween(100), label = "flash")
 
     LaunchedEffect(isRecording) {
         if (isRecording) {
@@ -255,7 +258,10 @@ fun CameraCaptureScreen(
     fun takePhoto() {
         if (captureBusy || isRecording || boundCamera == null) return
         captureBusy = true
-        flashAlpha = 0.9f
+        scope.launch {
+            shutterFlash.snapTo(0.55f)
+            shutterFlash.animateTo(0f, tween(220))
+        }
         val file = File(mediaDir(), "IMG_${stamp()}.jpg")
         val opts = ImageCapture.OutputFileOptions.Builder(file).build()
         imageCapture.takePicture(
@@ -265,16 +271,15 @@ fun CameraCaptureScreen(
                 override fun onImageSaved(output: ImageCapture.OutputFileResults) {
                     state.addMedia(path = file.absolutePath, isVideo = false, aspectRatio = 3f / 4f)
                     android.os.Handler(android.os.Looper.getMainLooper()).post {
-                        flashAlpha = 0f
                         captureBusy = false
                         lastThumb = file.absolutePath
+                        sessionCaptureCount++
                     }
                 }
 
                 override fun onError(exception: ImageCaptureException) {
                     Log.e(TAG, "photo failed", exception)
                     android.os.Handler(android.os.Looper.getMainLooper()).post {
-                        flashAlpha = 0f
                         captureBusy = false
                     }
                 }
@@ -284,6 +289,13 @@ fun CameraCaptureScreen(
 
     fun startVideo() {
         if (isRecording || captureBusy || boundCamera == null) return
+        // Flip this the instant recording is requested, not when the async
+        // VideoRecordEvent.Start callback lands. A quick long-press could
+        // otherwise release *before* that callback fired — isRecording was
+        // still false, so the release handler's "if (isRecording) stopVideo()"
+        // never ran, and the recording kept going invisibly in the
+        // background with no UI evidence anything was captured.
+        isRecording = true
         val file = File(mediaDir(), "VID_${stamp()}.mp4")
         val opts = FileOutputOptions.Builder(file).build()
         try {
@@ -292,7 +304,6 @@ fun CameraCaptureScreen(
                 .apply { if (hasAudio) withAudioEnabled() }
                 .start(ContextCompat.getMainExecutor(context)) { event ->
                     when (event) {
-                        is VideoRecordEvent.Start -> isRecording = true
                         is VideoRecordEvent.Finalize -> {
                             isRecording = false
                             activeRecording = null
@@ -304,12 +315,19 @@ fun CameraCaptureScreen(
                                     durationLabel = "видео",
                                 )
                                 lastThumb = file.absolutePath
+                                sessionCaptureCount++
+                            } else {
+                                Log.e(TAG, "video finalize error: ${event.error}", event.cause)
+                                runCatching { file.delete() }
                             }
                         }
+                        else -> Unit
                     }
                 }
         } catch (e: Exception) {
             Log.e(TAG, "start video failed", e)
+            isRecording = false
+            activeRecording = null
         }
     }
 
@@ -333,10 +351,20 @@ fun CameraCaptureScreen(
     }
 
     Box(Modifier.fillMaxSize().background(Color.Black)) {
-        // Preview — full-bleed. The rounded corners live on the sliding
-        // sheet in LetifyApp, so the feed itself just fills the whole
-        // screen behind the controls, Telegram/Instagram-style.
-        Box(Modifier.fillMaxSize()) {
+        // Preview — boxed to the actual photo/video aspect ratio (3:4, same
+        // as what addMedia() saves) and rounded, instead of stretching the
+        // feed edge-to-edge across the whole phone screen. The plain black
+        // background above/below is the letterbox.
+        Box(
+            Modifier
+                .align(Alignment.TopCenter)
+                .windowInsetsPadding(WindowInsets.statusBars)
+                .padding(top = 68.dp)
+                .fillMaxWidth(0.94f)
+                .aspectRatio(3f / 4f)
+                .clip(RoundedCornerShape(28.dp))
+                .background(Color(0xFF111111)),
+        ) {
             if (hasCamera) {
                 AndroidView(
                     factory = { ctx ->
@@ -355,24 +383,11 @@ fun CameraCaptureScreen(
                 )
             }
 
-            // Flash
-            if (flashAnim > 0.01f) {
-                Box(Modifier.fillMaxSize().background(Color.White.copy(alpha = flashAnim)))
+            // Shutter flash — soft pulse, clipped to the frame so it reads
+            // as "this is the shot" rather than a full-screen white blink.
+            if (shutterFlash.value > 0.01f) {
+                Box(Modifier.fillMaxSize().background(Color.White.copy(alpha = shutterFlash.value)))
             }
-
-            // Bottom scrim so the controls stay legible over any footage,
-            // instead of a hard black bar under the feed.
-            Box(
-                Modifier
-                    .align(Alignment.BottomCenter)
-                    .fillMaxWidth()
-                    .height(190.dp)
-                    .background(
-                        Brush.verticalGradient(
-                            listOf(Color.Transparent, Color.Black.copy(alpha = 0.55f)),
-                        ),
-                    ),
-            )
 
             // Recording timer pill — red dot + running mm:ss, Telegram-style.
             AnimatedVisibility(
@@ -381,7 +396,6 @@ fun CameraCaptureScreen(
                 exit = fadeOut(tween(120)),
                 modifier = Modifier
                     .align(Alignment.TopCenter)
-                    .windowInsetsPadding(WindowInsets.statusBars)
                     .padding(top = 14.dp),
             ) {
                 Row(
@@ -464,21 +478,45 @@ fun CameraCaptureScreen(
                     enter = fadeIn(tween(180)) + scaleIn(initialScale = 0.7f, animationSpec = tween(180)),
                     exit = fadeOut(),
                 ) {
-                    val path = lastThumb
-                    if (path != null) {
-                        AsyncImage(
-                            model = ImageRequest.Builder(context)
-                                .data(Uri.fromFile(File(path)))
-                                .size(160)
-                                .crossfade(false)
-                                .build(),
-                            contentDescription = null,
-                            contentScale = ContentScale.Crop,
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .clip(RoundedCornerShape(12.dp))
-                                .border(1.5.dp, Color.White.copy(alpha = 0.7f), RoundedCornerShape(12.dp)),
-                        )
+                    Box {
+                        val path = lastThumb
+                        if (path != null) {
+                            AsyncImage(
+                                model = ImageRequest.Builder(context)
+                                    .data(Uri.fromFile(File(path)))
+                                    .size(160)
+                                    // Crossfade between successive thumbnails so a new
+                                    // shot eases in over the old one instead of
+                                    // popping in abruptly once decoded.
+                                    .crossfade(220)
+                                    .build(),
+                                contentDescription = null,
+                                contentScale = ContentScale.Crop,
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .clip(RoundedCornerShape(12.dp))
+                                    .border(1.5.dp, Color.White.copy(alpha = 0.7f), RoundedCornerShape(12.dp)),
+                            )
+                        }
+                        // Shot counter — how many photos/videos taken this session.
+                        if (sessionCaptureCount > 0) {
+                            Box(
+                                Modifier
+                                    .align(Alignment.TopEnd)
+                                    .offset(x = 6.dp, y = (-6).dp)
+                                    .background(Color.Black.copy(alpha = 0.75f), CircleShape)
+                                    .border(1.dp, Color.White.copy(alpha = 0.85f), CircleShape)
+                                    .padding(horizontal = 5.dp, vertical = 2.dp),
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                Text(
+                                    if (sessionCaptureCount > 99) "99+" else sessionCaptureCount.toString(),
+                                    color = Color.White,
+                                    fontWeight = FontWeight.SemiBold,
+                                    fontSize = 10.sp,
+                                )
+                            }
+                        }
                     }
                 }
             }
