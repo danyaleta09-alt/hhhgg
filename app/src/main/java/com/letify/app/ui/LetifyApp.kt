@@ -170,17 +170,15 @@ fun LetifyApp() {
     // Camera opens as a simple full-screen slide-up from the bottom.
     // Progress 0 = off-screen below, 1 = settled.
     //
-    // Performance contract (why open/close no longer jank):
-    //  1. ONE cancellable Job owns the slide — tapping close mid-open cancels
-    //     the open job cleanly instead of running two animateTo on the same
-    //     Animatable and racing `cameraReady = true` after a cancelled open.
-    //  2. `cameraReady` stays false for the entire slide-in AND is dropped
-    //     IMMEDIATELY on close — so CameraCaptureScreen never mounts a
-    //     PreviewView / never calls bindToLifecycle while frames are moving.
-    //     SurfaceView + parent translation = classic jank; we avoid that by
-    //     keeping the surface off-screen during any translation.
-    //  3. ProcessCameraProvider is prewarmed at app start (and again on open)
-    //     so the HAL handshake is already done by the time we bind.
+    // Live-preview contract (Telegram-style — picture stays during motion):
+    //  1. ONE cancellable Job owns the slide (mid-open close cancels cleanly).
+    //  2. `cameraReady` is true for the WHOLE visible lifetime — including the
+    //     slide-out. PreviewView uses TextureView (COMPATIBLE), which correctly
+    //     follows parent translationY, so the live feed rides the sheet instead
+    //     of being torn down → black flash → then animating.
+    //  3. Surface is released only AFTER the sheet is off-screen (cameraVisible
+    //     flips false → composition disposed → unbind). User never sees the drop.
+    //  4. ProcessCameraProvider is prewarmed at app start so bind is cheap.
     val cameraScope = rememberCoroutineScope()
     val appContext = LocalContext.current
     var cameraVisible by remember { mutableStateOf(false) }
@@ -191,27 +189,26 @@ fun LetifyApp() {
     val openCamera: () -> Unit = {
         CameraPrewarm.warm(appContext)
         cameraAnimJob?.cancel()
-        cameraReady = false
         cameraVisible = true
+        // Allow bind immediately — TextureView rides the slide-up with the feed.
+        cameraReady = true
         cameraAnimJob = cameraScope.launch {
             cameraProgress.animateTo(
                 1f,
                 animationSpec = tween(CameraSlideInMs, easing = CameraSlideEasing),
             )
-            // Final laid-out frame committed before any CameraX main-thread work.
-            cameraReady = true
         }
     }
     val closeCamera: () -> Unit = {
         cameraAnimJob?.cancel()
-        // Tear the surface down FIRST so the slide-out never transforms a live
-        // SurfaceView (that combination is what made mid-open close stutter).
-        cameraReady = false
+        // Keep cameraReady=true so the last live frame stays on screen while
+        // the sheet slides down. Release only after it's gone.
         cameraAnimJob = cameraScope.launch {
             cameraProgress.animateTo(
                 0f,
                 animationSpec = tween(CameraSlideOutMs, easing = CameraSlideEasing),
             )
+            cameraReady = false
             cameraVisible = false
         }
     }
@@ -483,12 +480,16 @@ fun LetifyApp() {
             else -> {}
         }
 
-        // Camera full-screen slide-up from bottom. Sits above overlays /
-        // navbar / sheets. Composed while visible or while the exit slide
-        // is still running so the close animation is smooth.
-        if (cameraVisible || cameraProgress.value > 0.001f) {
+        // Camera full-screen slide-up. Keyed ONLY on `cameraVisible` so the
+        // Animatable progress is read inside graphicsLayer (draw phase) and
+        // does NOT recompose CameraCaptureScreen / AndroidView every frame —
+        // that recomposition was what made the live TextureView flicker and
+        // the picture "snap" away during open/close.
+        // Close keeps cameraVisible=true until the slide finishes, so the
+        // feed rides translationY the whole way down.
+        if (cameraVisible) {
             Box(Modifier.fillMaxSize().zIndex(50f)) {
-                // Soft scrim that fades with the slide.
+                // Soft scrim that fades with the slide (draw-time read).
                 Box(
                     Modifier
                         .fillMaxSize()
@@ -504,13 +505,10 @@ fun LetifyApp() {
                             val p = cameraProgress.value.coerceIn(0f, 1f)
                             translationY = (1f - p) * size.height
                         }
-                        // Mild top rounding — Telegram uses a soft sheet edge,
-                        // not the heavy 28dp card radius.
                         .clip(RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp)),
                 ) {
                     CameraCaptureScreen(
                         onBack = closeCamera,
-                        // Stay on camera; a corner thumbnail confirms the shot.
                         onCaptured = {},
                         readyToBind = cameraReady,
                     )

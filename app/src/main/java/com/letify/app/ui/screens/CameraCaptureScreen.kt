@@ -74,6 +74,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
+import androidx.lifecycle.Observer
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import com.letify.app.ui.components.NoFeedbackButton
@@ -96,13 +97,10 @@ private const val LENS_FADE_MIN_ALPHA = 0.35f
 fun CameraCaptureScreen(
     onBack: () -> Unit,
     onCaptured: () -> Unit = {},
-    // True once the slide-up animation has settled. The provider is
-    // prewarmed way earlier (see CameraPrewarm), but the actual
-    // bindToLifecycle() call is real, synchronous, main-thread work —
-    // doing it while the slide is still animating is what causes the
-    // frame drops. Gating it on the caller's real animation-completion
-    // signal (instead of a guessed delay) keeps the two from ever
-    // competing for the same frames.
+    // True for the whole time the camera sheet is on-screen (open slide,
+    // settled, AND close slide). Host drops it only after the sheet is
+    // off-screen so the live TextureView can ride the translation instead
+    // of being torn down mid-motion (which looked like a hard black cut).
     readyToBind: Boolean = true,
 ) {
     val context = LocalContext.current
@@ -179,18 +177,11 @@ fun CameraCaptureScreen(
     var previewView by remember { mutableStateOf<PreviewView?>(null) }
     var bindGeneration by remember { mutableIntStateOf(0) }
 
-    // When the host drops readyToBind (close started, or open cancelled mid-slide)
-    // clear the surface reference and snap alpha so the next open fades cleanly
-    // and DisposableEffect's onDispose can unbind without a live TextureView
-    // still being translated by the sheet.
-    LaunchedEffect(readyToBind) {
-        if (!readyToBind) {
-            previewView = null
-            previewAlpha.snapTo(0f)
-        }
-    }
-
-    // Bind only after the slide has settled AND the PreviewView exists.
+    // Bind as soon as the PreviewView exists. readyToBind stays true for the
+    // whole open+close slide so the live TextureView rides translationY —
+    // picture never snaps to black. Fade-in waits for StreamState.STREAMING
+    // (first real frame), not bindToLifecycle return — that was the "резко
+    // появилась картинка" pop: alpha hit 1 before any frame was on screen.
     DisposableEffect(readyToBind, lensFacing, previewView, lifecycleOwner, bindGeneration, hasCamera) {
         val view = previewView
         if (!readyToBind || view == null || !hasCamera) {
@@ -201,6 +192,15 @@ fun CameraCaptureScreen(
             var provider: ProcessCameraProvider? = null
             var boundPreview: Preview? = null
             var cancelled = false
+            // Reveal only when the first camera frame is actually painting.
+            val streamObserver = Observer<PreviewView.StreamState> { state ->
+                if (!cancelled && state == PreviewView.StreamState.STREAMING) {
+                    scope.launch {
+                        previewAlpha.animateTo(1f, tween(200))
+                    }
+                }
+            }
+            view.previewStreamState.observe(lifecycleOwner, streamObserver)
 
             future.addListener({
                 if (cancelled) return@addListener
@@ -223,7 +223,6 @@ fun CameraCaptureScreen(
                         videoCapture,
                     )
                     if (cancelled) {
-                        // Close won the race — drop the bind we just did.
                         try { provider?.unbindAll() } catch (_: Exception) {}
                         return@addListener
                     }
@@ -241,9 +240,7 @@ fun CameraCaptureScreen(
                             .coerceIn(range.lower, range.upper)
                         cam.cameraControl.setExposureCompensationIndex(idx)
                     }
-                    scope.launch {
-                        previewAlpha.animateTo(1f, tween(220))
-                    }
+                    // Do NOT fade here — wait for streamObserver / STREAMING.
                 } catch (e: Exception) {
                     if (!cancelled) Log.e(TAG, "bind failed", e)
                 }
@@ -251,7 +248,7 @@ fun CameraCaptureScreen(
 
             onDispose {
                 cancelled = true
-                // Detach surface first (cheap), then unbind use-cases.
+                view.previewStreamState.removeObserver(streamObserver)
                 try { boundPreview?.setSurfaceProvider(null) } catch (_: Exception) {}
                 try { provider?.unbindAll() } catch (_: Exception) {}
                 boundCamera = null
@@ -386,11 +383,10 @@ fun CameraCaptureScreen(
                 .padding(top = 8.dp)
                 .clip(RoundedCornerShape(14.dp)),
         ) {
-            // CRITICAL: do NOT inflate PreviewView until the slide has settled
-            // (`readyToBind`). A live SurfaceView/TextureView being translated
-            // by the parent sheet is the classic open/close jank source.
-            // While sliding we show a plain black plate; the real surface
-            // appears only after motion stops, then fades in via previewAlpha.
+            // Live TextureView (COMPATIBLE) — follows the sheet's translationY
+            // during open AND close, so the picture never snaps to black.
+            // readyToBind stays true for the whole visible lifetime; surface
+            // is only released after the sheet is off-screen.
             if (hasCamera && readyToBind) {
                 AndroidView(
                     factory = { ctx ->
@@ -400,11 +396,9 @@ fun CameraCaptureScreen(
                                 ViewGroup.LayoutParams.MATCH_PARENT,
                             )
                             scaleType = PreviewView.ScaleType.FILL_CENTER
-                            // COMPATIBLE = TextureView — tolerates a parent
-                            // transform if close is tapped the same frame the
-                            // surface appears. PERFORMANCE (SurfaceView) is
-                            // cheaper once settled but fights any residual
-                            // translation hard.
+                            // TextureView: correctly transformed by parent
+                            // graphicsLayer. SurfaceView (PERFORMANCE) would
+                            // lag behind / punch holes during the slide.
                             implementationMode = PreviewView.ImplementationMode.COMPATIBLE
                         }.also { previewView = it }
                     },

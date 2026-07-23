@@ -12,8 +12,8 @@ android {
         applicationId = "com.letify.app"
         minSdk = 26
         targetSdk = 34
-        versionCode = 176
-        versionName = "r176-camera-no-jank"
+        versionCode = 177
+        versionName = "r177-camera-live-slide"
         vectorDrawables { useSupportLibrary = true }
     }
 
