@@ -1,7 +1,6 @@
 package com.letify.app.ui.screens
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -45,6 +44,11 @@ import java.time.format.TextStyle
 import java.util.Locale
 import kotlinx.coroutines.delay
 
+/**
+ * Home — variant A (list):
+ *  hero ring + greeting, then plain rows for now / water / nutrition / sleep / weight.
+ *  No habits, no notification bell, no nutrition tab.
+ */
 @Composable
 fun HomeScreen(
     onAddWeight: () -> Unit = {},
@@ -71,129 +75,180 @@ fun HomeScreen(
         else -> "Добрый вечер"
     }
     val today = LocalDate.now()
-    val dateLabel = buildString {
-        append(today.dayOfWeek.getDisplayName(TextStyle.FULL, Locale("ru")))
+    val dateShort = buildString {
+        append(today.dayOfWeek.getDisplayName(TextStyle.SHORT, Locale("ru")))
         append(", ")
         append(today.dayOfMonth)
         append(" ")
         append(today.month.getDisplayName(TextStyle.FULL, Locale("ru")))
     }
 
+    val planDone = tasksToday.count { it.statusAt(nowMin, dateKey) == TaskStatus.Done }
+    val planTotal = tasksToday.size
+    val waterL = state.waterMl / 1000f
+    val waterGoalL = state.waterTarget / 1000f
+
     ScreenScaffold(
         pinnedHeader = {
-            Text(
-                "летифай",
-                color = Letify.colors.text,
-                style = Letify.typography.titleMedium,
-                fontWeight = FontWeight.SemiBold,
-                modifier = Modifier
+            Row(
+                Modifier
+                    .fillMaxWidth()
                     .screenHPad()
-                    .padding(top = 12.dp, bottom = 8.dp),
-            )
+                    .padding(top = 10.dp, bottom = 8.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    "летифай",
+                    color = Letify.colors.text,
+                    style = Letify.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                )
+                Text(
+                    dateShort.replaceFirstChar { it.titlecase(Locale("ru")) },
+                    color = Letify.colors.muted,
+                    style = Letify.typography.bodySmall,
+                    fontWeight = FontWeight.SemiBold,
+                )
+            }
         },
     ) {
-        // Greeting
-        Column(Modifier.screenHPad().padding(top = 8.dp, bottom = 28.dp)) {
-            Text(
-                dateLabel.replaceFirstChar { it.titlecase(Locale("ru")) },
-                color = Letify.colors.muted,
-                style = Letify.typography.bodySmall,
-            )
-            Spacer(Modifier.height(6.dp))
-            Text(
-                "$greet,\n${state.userName.ifBlank { "друг" }}",
-                color = Letify.colors.text,
-                style = Letify.typography.displayLarge,
-                fontWeight = FontWeight.SemiBold,
-                lineHeight = 34.sp,
-            )
-        }
-
-        // Day progress — single large percent
-        Column(Modifier.screenHPad().padding(bottom = 28.dp)) {
-            Text(
-                text = "${(overall * 100).toInt()}%",
-                color = Letify.colors.text,
-                fontSize = 64.sp,
-                fontWeight = FontWeight.Light,
-                letterSpacing = (-1.5).sp,
-                lineHeight = 68.sp,
-            )
-            Spacer(Modifier.height(8.dp))
-            Text(
-                "прогресс за день · план, вода, питание",
-                color = Letify.colors.muted,
-                style = Letify.typography.bodySmall,
-            )
-        }
-
-        // Divider
-        Box(
+        // ── Hero ──
+        Row(
             Modifier
                 .screenHPad()
                 .fillMaxWidth()
-                .height(1.dp)
-                .background(Letify.colors.track),
-        )
-        Spacer(Modifier.height(28.dp))
-
-        // Now
-        SectionLabel("Сейчас")
-        NowBlock(tasksToday = tasksToday, nowMin = nowMin, dateKey = dateKey)
-        Spacer(Modifier.height(28.dp))
-
-        // Water
-        Row(
-            Modifier.screenHPad().fillMaxWidth().padding(bottom = 12.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
+                .clip(RoundedCornerShape(20.dp))
+                .background(Letify.colors.container)
+                .padding(18.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Text("Вода", color = Letify.colors.muted, style = Letify.typography.bodySmall)
-            NoFeedbackButton(onClick = onWaterHistory) {
-                Text("история", color = Letify.colors.accent, style = Letify.typography.bodySmall)
+            Box(Modifier.size(88.dp), contentAlignment = Alignment.Center) {
+                ProgressRing(
+                    progress = overall,
+                    color = Letify.colors.accent,
+                    size = 88.dp,
+                    strokeWidth = 7.5.dp,
+                )
+                Text(
+                    "${(overall * 100).toInt()}%",
+                    color = Letify.colors.text,
+                    fontSize = 20.sp,
+                    fontWeight = FontWeight.Bold,
+                    letterSpacing = (-0.5).sp,
+                )
+            }
+            Spacer(Modifier.width(16.dp))
+            Column(Modifier.weight(1f)) {
+                Text(
+                    greet,
+                    color = Letify.colors.muted,
+                    style = Letify.typography.bodySmall,
+                    fontWeight = FontWeight.Medium,
+                )
+                Text(
+                    state.userName.ifBlank { "друг" },
+                    color = Letify.colors.text,
+                    fontSize = 19.sp,
+                    fontWeight = FontWeight.Bold,
+                    letterSpacing = (-0.3).sp,
+                )
+                Spacer(Modifier.height(10.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+                    HeroStat(
+                        if (planTotal == 0) "—" else "$planDone/$planTotal",
+                        "план",
+                    )
+                    HeroStat(
+                        String.format("%.2f", waterL).trimEnd('0').trimEnd(',', '.').replace('.', ','),
+                        "л воды",
+                    )
+                    HeroStat("${state.kcal}", "ккал")
+                }
             }
         }
-        WaterBlock()
-        Spacer(Modifier.height(28.dp))
 
-        // Nutrition
+        // ── Сейчас ──
+        SectionLabel("Сейчас")
+        NowRow(tasksToday = tasksToday, nowMin = nowMin, dateKey = dateKey)
+
+        // ── Вода ──
+        SectionLabel("Вода")
+        WaterSection(onHistory = onWaterHistory)
+
+        // ── Питание ──
         SectionLabel("Питание")
-        NutritionBlock(onOpen = onOpenNutrition)
-        Spacer(Modifier.height(28.dp))
+        ListRow(
+            dot = LetifyColors.Cal,
+            title = "${state.kcal} ккал",
+            subtitle = "цель ${state.kcalTarget} · осталось ${(state.kcalTarget - state.kcal).coerceAtLeast(0)}",
+            onClick = onOpenNutrition,
+            trailing = {
+                SolarIcon(
+                    name = "alt-arrow-right-outline",
+                    tint = Letify.colors.muted.copy(alpha = 0.4f),
+                    size = 16.dp,
+                )
+            },
+        )
 
-        // Sleep / Weight
-        Row(Modifier.screenHPad().fillMaxWidth()) {
-            Column(Modifier.weight(1f)) {
-                Text("Сон", color = Letify.colors.muted, style = Letify.typography.bodySmall)
-                Spacer(Modifier.height(6.dp))
-                val sleep = state.sleepLog.maxByOrNull { it.dateKey }
-                val sleepText = sleep?.let {
-                    val m = it.durationMinutes
-                    "${m / 60} ч ${m % 60} м"
-                } ?: "—"
-                NoFeedbackButton(onClick = onAddSleep) {
-                    Text(
-                        sleepText,
-                        color = Letify.colors.text,
-                        style = Letify.typography.titleLarge,
-                        fontWeight = FontWeight.Medium,
-                    )
-                }
-            }
-            Column(Modifier.weight(1f)) {
-                Text("Вес", color = Letify.colors.muted, style = Letify.typography.bodySmall)
-                Spacer(Modifier.height(6.dp))
-                NoFeedbackButton(onClick = onAddWeight) {
-                    Text(
-                        String.format("%.1f кг", state.weight).replace('.', ','),
-                        color = Letify.colors.text,
-                        style = Letify.typography.titleLarge,
-                        fontWeight = FontWeight.Medium,
-                    )
-                }
-            }
-        }
-        Spacer(Modifier.height(24.dp))
+        // ── Ещё ──
+        SectionLabel("Ещё")
+        val sleep = state.sleepLog.maxByOrNull { it.dateKey }
+        val sleepText = sleep?.let {
+            val m = it.durationMinutes
+            "${m / 60}ч ${m % 60}м"
+        } ?: "—"
+        ListRow(
+            dot = LetifyColors.Mint,
+            title = "Сон",
+            subtitle = "прошлая ночь",
+            onClick = onAddSleep,
+            trailing = {
+                Text(
+                    sleepText,
+                    color = Letify.colors.text,
+                    style = Letify.typography.bodyMedium,
+                    fontWeight = FontWeight.Bold,
+                )
+            },
+        )
+        ListRow(
+            dot = LetifyColors.Yellow,
+            title = "Вес",
+            subtitle = "последний замер",
+            onClick = onAddWeight,
+            trailing = {
+                Text(
+                    String.format("%.1f кг", state.weight).replace('.', ','),
+                    color = Letify.colors.text,
+                    style = Letify.typography.bodyMedium,
+                    fontWeight = FontWeight.Bold,
+                )
+            },
+            showDivider = false,
+        )
+
+        Spacer(Modifier.height(20.dp))
+    }
+}
+
+@Composable
+private fun HeroStat(value: String, label: String) {
+    Column {
+        Text(
+            value,
+            color = Letify.colors.text,
+            fontSize = 13.sp,
+            fontWeight = FontWeight.Bold,
+            letterSpacing = (-0.2).sp,
+        )
+        Text(
+            label,
+            color = Letify.colors.muted,
+            fontSize = 11.sp,
+            fontWeight = FontWeight.Medium,
+        )
     }
 }
 
@@ -202,31 +257,50 @@ private fun SectionLabel(text: String) {
     Text(
         text,
         color = Letify.colors.muted,
-        style = Letify.typography.bodySmall,
-        modifier = Modifier.screenHPad().padding(bottom = 12.dp),
+        fontSize = 12.sp,
+        fontWeight = FontWeight.SemiBold,
+        modifier = Modifier
+            .screenHPad()
+            .padding(top = 22.dp, bottom = 4.dp),
     )
 }
 
 @Composable
-private fun NowBlock(tasksToday: List<TaskItem>, nowMin: Int, dateKey: String) {
+private fun NowRow(tasksToday: List<TaskItem>, nowMin: Int, dateKey: String) {
     val live = tasksToday.firstOrNull { it.statusAt(nowMin, dateKey) == TaskStatus.Live }
     val next = live ?: tasksToday
         .filter { it.statusAt(nowMin, dateKey) == TaskStatus.Upcoming }
         .minByOrNull { it.startMinutes }
 
-    Column(Modifier.screenHPad()) {
+    Row(
+        Modifier
+            .screenHPad()
+            .fillMaxWidth()
+            .padding(vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Box(
+            Modifier
+                .size(9.dp)
+                .background(
+                    if (live != null) Letify.colors.accent else Letify.colors.muted.copy(alpha = 0.45f),
+                    CircleShape,
+                ),
+        )
+        Spacer(Modifier.width(14.dp))
         if (next == null) {
             Text(
-                "ничего не запланировано",
+                "Свободно · нет задач",
                 color = Letify.colors.muted,
                 style = Letify.typography.bodyMedium,
+                fontWeight = FontWeight.Medium,
             )
         } else {
             val status = next.statusAt(nowMin, dateKey)
             val tag = when (status) {
                 TaskStatus.Live -> {
                     val left = (next.endMinutes - nowMin).coerceAtLeast(0)
-                    "идёт · ещё $left мин"
+                    "ещё $left мин"
                 }
                 TaskStatus.Upcoming -> {
                     val inMin = (next.startMinutes - nowMin).coerceAtLeast(0)
@@ -237,94 +311,89 @@ private fun NowBlock(tasksToday: List<TaskItem>, nowMin: Int, dateKey: String) {
                 else -> "готово"
             }
             Text(
-                tag,
-                color = Letify.colors.accent,
-                style = Letify.typography.bodySmall,
-                fontWeight = FontWeight.Medium,
-            )
-            Spacer(Modifier.height(6.dp))
-            Text(
-                next.name,
+                buildString {
+                    append(next.name)
+                    append(" · ")
+                    append(tag)
+                },
                 color = Letify.colors.text,
-                style = Letify.typography.titleMedium,
-                fontWeight = FontWeight.Medium,
-            )
-            Spacer(Modifier.height(4.dp))
-            Text(
-                formatRange(next.startMinutes, next.endMinutes),
-                color = Letify.colors.muted,
-                style = Letify.typography.bodySmall,
+                style = Letify.typography.bodyMedium,
+                fontWeight = FontWeight.SemiBold,
             )
         }
     }
-}
-
-private fun formatRange(start: Int, end: Int): String {
-    fun fmt(m: Int) = "%d:%02d".format(m / 60, m % 60)
-    return "${fmt(start)} – ${fmt(end)}"
+    Box(
+        Modifier
+            .screenHPad()
+            .fillMaxWidth()
+            .height(1.dp)
+            .background(Letify.colors.track),
+    )
 }
 
 @Composable
-private fun WaterBlock() {
+private fun WaterSection(onHistory: () -> Unit) {
     val state = LocalAppState.current
     val ml = state.waterMl
     val goal = state.waterTarget.coerceAtLeast(1)
     val liters = ml / 1000f
-    val goalLiters = goal / 1000f
     val progress = (ml.toFloat() / goal).coerceIn(0f, 1f)
 
-    Column(
-        Modifier
-            .screenHPad()
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(20.dp))
-            .background(Letify.colors.container)
-            .padding(20.dp),
-    ) {
+    Column(Modifier.screenHPad().fillMaxWidth()) {
         Row(
-            Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.Bottom,
+            Modifier
+                .fillMaxWidth()
+                .padding(vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically,
         ) {
-            Row(verticalAlignment = Alignment.Bottom) {
+            Box(
+                Modifier
+                    .size(9.dp)
+                    .background(LetifyColors.Water, CircleShape),
+            )
+            Spacer(Modifier.width(14.dp))
+            Column(Modifier.weight(1f)) {
                 Text(
-                    String.format("%.2f", liters).replace('.', ','),
+                    String.format("%.2f л", liters).replace('.', ','),
                     color = Letify.colors.text,
-                    fontSize = 32.sp,
-                    fontWeight = FontWeight.Medium,
-                    letterSpacing = (-0.5).sp,
-                )
-                Spacer(Modifier.width(6.dp))
-                Text(
-                    "л",
-                    color = Letify.colors.muted,
                     style = Letify.typography.bodyMedium,
-                    modifier = Modifier.padding(bottom = 4.dp),
+                    fontWeight = FontWeight.SemiBold,
+                )
+                Text(
+                    "цель ${String.format("%.1f", goal / 1000f).replace('.', ',')} л · ${(progress * 100).toInt()}%",
+                    color = Letify.colors.muted,
+                    style = Letify.typography.bodySmall,
+                    fontWeight = FontWeight.Medium,
                 )
             }
-            Text(
-                "из ${String.format("%.1f", goalLiters).replace('.', ',')} л",
-                color = Letify.colors.muted,
-                style = Letify.typography.bodySmall,
-            )
+            NoFeedbackButton(onClick = onHistory) {
+                Text(
+                    "история",
+                    color = Letify.colors.accent,
+                    style = Letify.typography.bodySmall,
+                    fontWeight = FontWeight.SemiBold,
+                )
+            }
         }
-        Spacer(Modifier.height(14.dp))
         Box(
             Modifier
                 .fillMaxWidth()
-                .height(3.dp)
+                .height(4.dp)
                 .clip(RoundedCornerShape(99.dp))
                 .background(Letify.colors.track),
         ) {
             Box(
                 Modifier
                     .fillMaxWidth(progress)
-                    .height(3.dp)
+                    .height(4.dp)
                     .background(LetifyColors.Water, RoundedCornerShape(99.dp)),
             )
         }
-        Spacer(Modifier.height(16.dp))
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        Spacer(Modifier.height(12.dp))
+        Row(
+            Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
             WaterChip("+100", false, Modifier.weight(1f)) {
                 state.addWater(100, "Вода", "water")
             }
@@ -335,6 +404,13 @@ private fun WaterBlock() {
                 state.addWater(500, "Вода", "water")
             }
         }
+        Spacer(Modifier.height(8.dp))
+        Box(
+            Modifier
+                .fillMaxWidth()
+                .height(1.dp)
+                .background(Letify.colors.track),
+        )
     }
 }
 
@@ -350,12 +426,10 @@ private fun WaterChip(
             Modifier
                 .fillMaxWidth()
                 .height(40.dp)
-                .then(
-                    if (primary) {
-                        Modifier.background(LetifyColors.Water, RoundedCornerShape(12.dp))
-                    } else {
-                        Modifier.border(1.dp, Letify.colors.track, RoundedCornerShape(12.dp))
-                    },
+                .clip(RoundedCornerShape(12.dp))
+                .background(
+                    if (primary) LetifyColors.Water
+                    else Letify.colors.text.copy(alpha = 0.06f),
                 ),
             contentAlignment = Alignment.Center,
         ) {
@@ -363,73 +437,59 @@ private fun WaterChip(
                 label,
                 color = if (primary) Color.White else Letify.colors.text,
                 style = Letify.typography.bodyMedium,
-                fontWeight = FontWeight.Medium,
+                fontWeight = FontWeight.Bold,
             )
         }
     }
 }
 
 @Composable
-private fun NutritionBlock(onOpen: () -> Unit) {
-    val state = LocalAppState.current
-    val progress = (state.kcal.toFloat() / state.kcalTarget.coerceAtLeast(1)).coerceIn(0f, 1f)
-    val left = (state.kcalTarget - state.kcal).coerceAtLeast(0)
-
-    NoFeedbackButton(onClick = onOpen, modifier = Modifier.screenHPad().fillMaxWidth()) {
-        Column(Modifier.fillMaxWidth()) {
+private fun ListRow(
+    dot: Color,
+    title: String,
+    subtitle: String,
+    onClick: () -> Unit,
+    trailing: @Composable () -> Unit,
+    showDivider: Boolean = true,
+) {
+    NoFeedbackButton(onClick = onClick, modifier = Modifier.fillMaxWidth()) {
+        Column(Modifier.screenHPad().fillMaxWidth()) {
             Row(
+                Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 14.dp),
                 verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.fillMaxWidth(),
             ) {
-                Box(Modifier.size(48.dp), contentAlignment = Alignment.Center) {
-                    ProgressRing(
-                        progress = progress,
-                        color = LetifyColors.Cal,
-                        size = 48.dp,
-                        strokeWidth = 3.dp,
-                    )
-                }
+                Box(
+                    Modifier
+                        .size(9.dp)
+                        .background(dot, CircleShape),
+                )
                 Spacer(Modifier.width(14.dp))
                 Column(Modifier.weight(1f)) {
                     Text(
-                        "${state.kcal} ккал",
+                        title,
                         color = Letify.colors.text,
-                        style = Letify.typography.titleMedium,
-                        fontWeight = FontWeight.Medium,
+                        style = Letify.typography.bodyMedium,
+                        fontWeight = FontWeight.SemiBold,
                     )
                     Text(
-                        "цель ${state.kcalTarget} · осталось $left",
+                        subtitle,
                         color = Letify.colors.muted,
                         style = Letify.typography.bodySmall,
+                        fontWeight = FontWeight.Medium,
                     )
                 }
-                SolarIcon(
-                    name = "alt-arrow-right-outline",
-                    tint = Letify.colors.muted.copy(alpha = 0.45f),
-                    size = 18.dp,
+                trailing()
+            }
+            if (showDivider) {
+                Box(
+                    Modifier
+                        .fillMaxWidth()
+                        .height(1.dp)
+                        .background(Letify.colors.track),
                 )
             }
-            Spacer(Modifier.height(14.dp))
-            Box(Modifier.fillMaxWidth().height(1.dp).background(Letify.colors.track))
-            Spacer(Modifier.height(14.dp))
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(24.dp)) {
-                MacroStat("${state.protein} г", "белки")
-                MacroStat("${state.fat} г", "жиры")
-                MacroStat("${state.carb} г", "углеводы")
-            }
         }
-    }
-}
-
-@Composable
-private fun MacroStat(value: String, label: String) {
-    Column {
-        Text(
-            value,
-            color = Letify.colors.text,
-            style = Letify.typography.bodyMedium,
-            fontWeight = FontWeight.Medium,
-        )
-        Text(label, color = Letify.colors.muted, style = Letify.typography.bodySmall)
     }
 }
