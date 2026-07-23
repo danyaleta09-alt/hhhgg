@@ -755,45 +755,8 @@ fun CameraCaptureScreen(
                 }
             }
 
-            // Dual-camera PIP — small fixed circle, only when concurrent is real.
-            if (dualMode && dualSupported) {
-                val pipSize = 104.dp
-                Box(
-                    Modifier
-                        .align(Alignment.TopEnd)
-                        .padding(top = 56.dp, end = 12.dp)
-                        .offset { IntOffset(pipOffset.x.toInt(), pipOffset.y.toInt()) }
-                        .requiredSize(pipSize)
-                        .clip(CircleShape)
-                        .background(Color.Black, CircleShape)
-                        .border(2.dp, Color.White.copy(alpha = 0.9f), CircleShape)
-                        .pointerInput(Unit) {
-                            detectDragGestures { change, drag ->
-                                change.consume()
-                                pipOffset = Offset(
-                                    pipOffset.x + drag.x,
-                                    pipOffset.y + drag.y,
-                                )
-                            }
-                        },
-                ) {
-                    AndroidView(
-                        factory = { ctx ->
-                            PreviewView(ctx).apply {
-                                layoutParams = ViewGroup.LayoutParams(
-                                    ViewGroup.LayoutParams.MATCH_PARENT,
-                                    ViewGroup.LayoutParams.MATCH_PARENT,
-                                )
-                                scaleType = PreviewView.ScaleType.FILL_CENTER
-                                implementationMode = PreviewView.ImplementationMode.COMPATIBLE
-                            }.also { secondaryPreviewView = it }
-                        },
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .clip(CircleShape),
-                    )
-                }
-            }
+            // Dual PIP disabled in UI until concurrent bind is solid on device.
+            // (Previous AndroidView surface ignored Compose size and drew a huge card.)
 
             // Timer countdown
             if (timerRemaining > 0) {
@@ -1070,46 +1033,47 @@ private fun CameraToolsBar(
     val zoomActive = useUltraWide
     val dualActive = dualMode
 
-    // Fixed-height row — the exposure bubble is drawn ABOVE the sun icon via
-    // offset and never participates in layout (no jump when it opens).
-    Row(
-        modifier = modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.SpaceEvenly,
-        verticalAlignment = Alignment.CenterVertically,
+    // Fixed 44dp-tall strip so the exposure popup never shifts the row.
+    // Popup uses unbounded wrapContentSize + offset to draw above the icons.
+    Box(
+        modifier = modifier
+            .fillMaxWidth()
+            .height(44.dp),
     ) {
-        ToolIcon(
-            icon = "fire-outline",
-            active = flashActive,
-            accent = accent,
-            badge = when (flashMode) {
-                ImageCapture.FLASH_MODE_ON -> "1"
-                ImageCapture.FLASH_MODE_AUTO -> "A"
-                else -> null
-            },
-            onClick = onFlash,
-        )
-        ToolIcon(
-            icon = "stopwatch-bold-duotone",
-            active = timerActive,
-            accent = accent,
-            badge = if (timerSec > 0) "$timerSec" else null,
-            onClick = onTimer,
-        )
-        if (ultraWideAvailable) {
-            ToolIcon(
-                icon = "camera-bold-duotone",
-                active = zoomActive,
-                accent = accent,
-                badge = if (useUltraWide) "0.6" else "1×",
-                onClick = onZoom,
-            )
-        }
-        // Always visible from the first frame (unlike before, when it waited
-        // for camera bind to report EV support). Dimmed until supported.
-        Box(
-            modifier = Modifier.size(44.dp),
-            contentAlignment = Alignment.Center,
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .align(Alignment.Center),
+            horizontalArrangement = Arrangement.SpaceEvenly,
+            verticalAlignment = Alignment.CenterVertically,
         ) {
+            ToolIcon(
+                icon = "fire-outline",
+                active = flashActive,
+                accent = accent,
+                badge = when (flashMode) {
+                    ImageCapture.FLASH_MODE_ON -> "1"
+                    ImageCapture.FLASH_MODE_AUTO -> "A"
+                    else -> null
+                },
+                onClick = onFlash,
+            )
+            ToolIcon(
+                icon = "stopwatch-bold-duotone",
+                active = timerActive,
+                accent = accent,
+                badge = if (timerSec > 0) "$timerSec" else null,
+                onClick = onTimer,
+            )
+            if (ultraWideAvailable) {
+                ToolIcon(
+                    icon = "camera-bold-duotone",
+                    active = zoomActive,
+                    accent = accent,
+                    badge = if (useUltraWide) "0.6" else "1×",
+                    onClick = onZoom,
+                )
+            }
             ToolIcon(
                 icon = "sun-bold",
                 active = showExposure || exposureIndex != 0,
@@ -1119,27 +1083,30 @@ private fun CameraToolsBar(
                     if (exposureSupported) onExposureToggle()
                 },
             )
-            if (showExposure && exposureSupported && exposureMax > exposureMin) {
-                ExposureBubble(
-                    index = exposureIndex,
-                    min = exposureMin,
-                    max = exposureMax,
-                    accent = accent,
-                    onChange = onExposureChange,
-                    modifier = Modifier
-                        .align(Alignment.BottomCenter)
-                        // Float above the 44dp icon; does not affect row layout.
-                        .offset(y = (-52).dp),
-                )
-            }
+            ToolIcon(
+                icon = "user-circle-bold-duotone",
+                active = dualActive,
+                accent = accent,
+                dimmed = !dualSupported,
+                onClick = onDual,
+            )
         }
-        ToolIcon(
-            icon = "user-circle-bold-duotone",
-            active = dualActive,
-            accent = accent,
-            dimmed = !dualSupported,
-            onClick = onDual, // always clickable; toggleDual no-ops if unsupported
-        )
+
+        // Full horizontal slider bubble — must be unbounded or the 44dp parent
+        // squeezes it into a tiny square (what the user was seeing).
+        if (showExposure && exposureSupported && exposureMax > exposureMin) {
+            ExposureBubble(
+                index = exposureIndex,
+                min = exposureMin,
+                max = exposureMax,
+                accent = accent,
+                onChange = onExposureChange,
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .offset(y = (-56).dp)
+                    .wrapContentSize(unbounded = true, align = Alignment.BottomCenter),
+            )
+        }
     }
 }
 
@@ -1183,6 +1150,7 @@ private fun ToolIcon(
 
 /**
  * Horizontal exposure slider in a dark bubble with a bottom tail.
+ * Parent must allow overflow (wrapContentSize(unbounded=true)).
  */
 @Composable
 private fun ExposureBubble(
@@ -1210,12 +1178,16 @@ private fun ExposureBubble(
         onChange(min + kotlin.math.round(clamped * range).toInt())
     }
 
-    Column(modifier = modifier, horizontalAlignment = Alignment.CenterHorizontally) {
+    Column(
+        modifier = modifier,
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
         Row(
             Modifier
-                .width(220.dp)
-                .background(Color(0xEE1C1C1E), RoundedCornerShape(16.dp))
-                .padding(horizontal = 14.dp, vertical = 12.dp),
+                .width(240.dp)
+                .height(44.dp)
+                .background(Color(0xF21C1C1E), RoundedCornerShape(16.dp))
+                .padding(horizontal = 14.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(10.dp),
         ) {
@@ -1223,7 +1195,7 @@ private fun ExposureBubble(
             BoxWithConstraints(
                 Modifier
                     .weight(1f)
-                    .height(28.dp)
+                    .height(32.dp)
                     .pointerInput(min, max) {
                         detectTapGestures { offset ->
                             applyFrac(offset.x / size.width.toFloat())
@@ -1241,25 +1213,25 @@ private fun ExposureBubble(
                         )
                     },
             ) {
-                val thumbR = 8.dp
+                val thumbR = 9.dp
                 val travel = maxWidth - thumbR * 2
-                // Track
+                // Track background
                 Box(
                     Modifier
                         .align(Alignment.CenterStart)
                         .fillMaxWidth()
-                        .height(3.dp)
-                        .background(Color.White.copy(alpha = 0.2f), RoundedCornerShape(999.dp)),
+                        .height(4.dp)
+                        .background(Color.White.copy(alpha = 0.22f), RoundedCornerShape(999.dp)),
                 )
                 // Active fill
                 Box(
                     Modifier
                         .align(Alignment.CenterStart)
                         .fillMaxWidth(visualFrac.coerceIn(0.02f, 1f))
-                        .height(3.dp)
+                        .height(4.dp)
                         .background(accent, RoundedCornerShape(999.dp)),
                 )
-                // Thumb
+                // Draggable thumb
                 Box(
                     Modifier
                         .align(Alignment.CenterStart)
@@ -1272,13 +1244,13 @@ private fun ExposureBubble(
             }
             Text(
                 text = if (index > 0) "+$index" else "$index",
-                color = Color.White.copy(alpha = 0.7f),
+                color = Color.White.copy(alpha = 0.75f),
                 fontSize = 12.sp,
-                fontWeight = FontWeight.Medium,
+                fontWeight = FontWeight.SemiBold,
                 modifier = Modifier.width(28.dp),
             )
         }
-        // Tail pointing down toward the sun icon
+        // Tail pointing down to the sun icon
         androidx.compose.foundation.Canvas(
             Modifier.size(width = 16.dp, height = 8.dp),
         ) {
@@ -1288,7 +1260,7 @@ private fun ExposureBubble(
                 lineTo(size.width / 2f, size.height)
                 close()
             }
-            drawPath(p, Color(0xEE1C1C1E))
+            drawPath(p, Color(0xF21C1C1E))
         }
     }
 }

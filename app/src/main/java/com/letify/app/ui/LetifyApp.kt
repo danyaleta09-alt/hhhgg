@@ -97,6 +97,7 @@ sealed interface AddOverlay {
     data class Habit(val editId: Int? = null) : AddOverlay
     data class Task(val editId: Int? = null) : AddOverlay
     data object Nutrition : AddOverlay
+    data object NutritionHub : AddOverlay
     data object Weight : AddOverlay
     data object Sleep : AddOverlay
     data object EditProfile : AddOverlay
@@ -321,13 +322,16 @@ fun LetifyApp() {
                         when (tab) {
                             Tab.Home -> HomeScreen(
                                 onAddWeight = { push(AddOverlay.Weight) },
-                                onAddMeal = { push(AddOverlay.Nutrition) },
+                                onOpenNutrition = { push(AddOverlay.NutritionHub) },
                                 onAddSleep = { push(AddOverlay.Sleep) },
-                            )
-                            Tab.Nutrition -> NutritionScreen(
-                                onAddMeal = { push(AddOverlay.Nutrition) },
                                 onWaterHistory = { push(AddOverlay.WaterHistory) },
                             )
+                            Tab.Nutrition -> {
+                                androidx.compose.runtime.LaunchedEffect(Unit) {
+                                    state.currentTab = Tab.Home
+                                }
+                                Box(Modifier.fillMaxSize())
+                            }
                             Tab.Plan -> PlanScreen(
                                 onAddHabit = { push(AddOverlay.Habit()) },
                                 onAddTask = { push(AddOverlay.Task()) },
@@ -462,6 +466,8 @@ fun LetifyApp() {
                                 onPushWeight = { rootSheet = AddOverlay.Weight },
                                 onPushSleep = { rootSheet = AddOverlay.Sleep },
                                 onOpenCameraExpand = { openCamera() },
+                                onPushNutrition = { push(AddOverlay.Nutrition) },
+                                onPushWaterHistory = { push(AddOverlay.WaterHistory) },
                             )
                         }
                     }
@@ -542,6 +548,11 @@ private fun OverlayContent(
         is AddOverlay.Habit -> AddHabitScreen(onBack = animatedBack, editId = current.editId)
         is AddOverlay.Task -> AddTaskScreen(onBack = animatedBack, editId = current.editId)
         AddOverlay.Nutrition -> AddNutritionScreen(onBack = animatedBack)
+        AddOverlay.NutritionHub -> NutritionScreen(
+            onBack = animatedBack,
+            onAddMeal = { /* push add meal from hub — handled via parent if needed */ },
+            onWaterHistory = {},
+        )
         AddOverlay.Sleep -> AddSleepScreen(onBack = animatedBack)
         AddOverlay.Weight -> {} // weight is a bottom-sheet, handled elsewhere
         AddOverlay.EditProfile -> EditProfileScreen(onBack = animatedBack)

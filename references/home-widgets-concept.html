@@ -1,0 +1,730 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Letify — Главный экран (виджеты)</title>
+<style>
+  :root {
+    --bg: #000000;
+    --card: #181818;
+    --card2: #1f1f1f;
+    --text: #f4f4f5;
+    --muted: #8a8a92;
+    --accent: #b084f5;
+    --accent-soft: rgba(176, 132, 245, 0.16);
+    --water: #5aa7ff;
+    --cal: #ff8c5a;
+    --protein: #ff6b9d;
+    --fat: #ffd166;
+    --carb: #b084f5;
+    --mint: #7cd992;
+    --track: rgba(255,255,255,0.08);
+    --radius: 20px;
+    --radius-sm: 14px;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI", Roboto, sans-serif;
+    background: #0a0a0c;
+    color: var(--text);
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 28px;
+    padding: 32px 16px 64px;
+  }
+  h1.page {
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--muted);
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+  }
+  .note {
+    max-width: 390px;
+    font-size: 13px;
+    line-height: 1.5;
+    color: var(--muted);
+    text-align: center;
+  }
+  .note strong { color: var(--text); font-weight: 600; }
+
+  /* ── Phone frame ── */
+  .phone {
+    width: 390px;
+    height: 844px;
+    background: var(--bg);
+    border-radius: 44px;
+    border: 1px solid #222;
+    box-shadow: 0 40px 80px rgba(0,0,0,0.55), inset 0 0 0 1px rgba(255,255,255,0.04);
+    overflow: hidden;
+    position: relative;
+    display: flex;
+    flex-direction: column;
+  }
+  .status {
+    height: 54px;
+    padding: 14px 28px 0;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 15px;
+    font-weight: 600;
+    flex-shrink: 0;
+  }
+  .status .icons { display: flex; gap: 6px; font-size: 13px; opacity: 0.9; }
+
+  .scroll {
+    flex: 1;
+    overflow-y: auto;
+    padding: 0 16px 110px;
+    scrollbar-width: none;
+  }
+  .scroll::-webkit-scrollbar { display: none; }
+
+  /* Header — no bell */
+  .header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 8px 4px 16px;
+  }
+  .header .brand {
+    font-size: 28px;
+    font-weight: 700;
+    letter-spacing: -0.03em;
+  }
+  .header .date {
+    font-size: 13px;
+    color: var(--muted);
+    font-weight: 500;
+  }
+
+  /* Greeting */
+  .greet {
+    padding: 0 4px 18px;
+  }
+  .greet .hi {
+    font-size: 15px;
+    color: var(--muted);
+    margin-bottom: 4px;
+  }
+  .greet .name {
+    font-size: 22px;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+  }
+
+  /* ── Day progress hero ── */
+  .hero {
+    background: var(--card);
+    border-radius: 24px;
+    padding: 20px 18px;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+    margin-bottom: 12px;
+  }
+  .hero-left {
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    gap: 12px;
+  }
+  .hero-label {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+  }
+  .hero-pct {
+    font-size: 42px;
+    font-weight: 700;
+    letter-spacing: -0.04em;
+    line-height: 1;
+  }
+  .hero-pct span {
+    font-size: 20px;
+    color: var(--muted);
+    font-weight: 600;
+  }
+  .hero-sub {
+    font-size: 13px;
+    color: var(--muted);
+    line-height: 1.35;
+  }
+  .rings {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+    width: 132px;
+    height: 132px;
+    margin-left: auto;
+  }
+  .ring {
+    position: absolute;
+    border-radius: 50%;
+    border-style: solid;
+    border-color: var(--track);
+  }
+  .ring.outer {
+    width: 132px; height: 132px;
+    border-width: 10px;
+    border-top-color: var(--accent);
+    border-right-color: var(--accent);
+    border-bottom-color: var(--accent);
+    transform: rotate(-90deg);
+  }
+  .ring.mid {
+    width: 100px; height: 100px;
+    border-width: 8px;
+    border-top-color: var(--water);
+    border-right-color: var(--water);
+    transform: rotate(-90deg);
+  }
+  .ring.inner {
+    width: 72px; height: 72px;
+    border-width: 7px;
+    border-top-color: var(--cal);
+    transform: rotate(-90deg);
+  }
+  .ring-center {
+    position: relative;
+    z-index: 1;
+    text-align: center;
+  }
+  .ring-center .n {
+    font-size: 18px;
+    font-weight: 700;
+  }
+  .ring-center .l {
+    font-size: 10px;
+    color: var(--muted);
+    font-weight: 600;
+  }
+  .legend {
+    grid-column: 1 / -1;
+    display: flex;
+    gap: 14px;
+    flex-wrap: wrap;
+    padding-top: 4px;
+    border-top: 1px solid rgba(255,255,255,0.06);
+  }
+  .legend-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+    color: var(--muted);
+  }
+  .dot {
+    width: 8px; height: 8px;
+    border-radius: 50%;
+  }
+
+  /* ── Widget grid ── */
+  .grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+    margin-bottom: 12px;
+  }
+  .widget {
+    background: var(--card);
+    border-radius: var(--radius);
+    padding: 16px;
+    position: relative;
+    overflow: hidden;
+    min-height: 148px;
+    display: flex;
+    flex-direction: column;
+  }
+  .widget.wide {
+    grid-column: 1 / -1;
+    min-height: 0;
+  }
+  .widget .top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 12px;
+  }
+  .widget .title {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 14px;
+    font-weight: 600;
+  }
+  .widget .title .ico {
+    width: 28px; height: 28px;
+    border-radius: 9px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 14px;
+  }
+  .widget .chev {
+    color: var(--muted);
+    font-size: 16px;
+    opacity: 0.6;
+  }
+  .widget .value {
+    font-size: 28px;
+    font-weight: 700;
+    letter-spacing: -0.03em;
+    line-height: 1.1;
+    margin-top: auto;
+  }
+  .widget .value small {
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--muted);
+  }
+  .widget .meta {
+    font-size: 12px;
+    color: var(--muted);
+    margin-top: 4px;
+  }
+
+  /* Water */
+  .water-bar {
+    height: 6px;
+    background: var(--track);
+    border-radius: 99px;
+    margin: 10px 0 12px;
+    overflow: hidden;
+  }
+  .water-bar > i {
+    display: block;
+    height: 100%;
+    width: 62%;
+    background: linear-gradient(90deg, #3d8fff, var(--water));
+    border-radius: 99px;
+  }
+  .water-actions {
+    display: flex;
+    gap: 8px;
+    margin-top: auto;
+  }
+  .chip {
+    flex: 1;
+    height: 36px;
+    border-radius: 12px;
+    border: none;
+    background: rgba(90, 167, 255, 0.14);
+    color: var(--water);
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    transition: background 0.15s;
+  }
+  .chip:active { background: rgba(90, 167, 255, 0.28); }
+  .chip.primary {
+    background: var(--water);
+    color: #fff;
+  }
+
+  /* Nutrition macros */
+  .macros {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-top: 4px;
+  }
+  .macro {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 12px;
+  }
+  .macro .name {
+    width: 28px;
+    color: var(--muted);
+    font-weight: 500;
+  }
+  .macro .track {
+    flex: 1;
+    height: 5px;
+    background: var(--track);
+    border-radius: 99px;
+    overflow: hidden;
+  }
+  .macro .track > i {
+    display: block;
+    height: 100%;
+    border-radius: 99px;
+  }
+  .macro .num {
+    width: 52px;
+    text-align: right;
+    color: var(--text);
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* Now task */
+  .now {
+    background: var(--card);
+    border-radius: var(--radius);
+    padding: 16px;
+    display: flex;
+    gap: 14px;
+    align-items: center;
+    margin-bottom: 12px;
+  }
+  .now .pulse {
+    width: 44px; height: 44px;
+    border-radius: 14px;
+    background: var(--accent-soft);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    position: relative;
+  }
+  .now .pulse::after {
+    content: "";
+    position: absolute;
+    inset: -3px;
+    border-radius: 16px;
+    border: 1.5px solid var(--accent);
+    opacity: 0.35;
+    animation: pulse 2s ease infinite;
+  }
+  @keyframes pulse {
+    0%, 100% { transform: scale(1); opacity: 0.35; }
+    50% { transform: scale(1.08); opacity: 0.15; }
+  }
+  .now .body { flex: 1; min-width: 0; }
+  .now .tag {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--accent);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    margin-bottom: 3px;
+  }
+  .now .task-name {
+    font-size: 15px;
+    font-weight: 600;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .now .task-time {
+    font-size: 12px;
+    color: var(--muted);
+    margin-top: 2px;
+  }
+
+  /* Quick row: sleep / weight */
+  .quick {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+    margin-bottom: 8px;
+  }
+  .quick .q {
+    background: var(--card);
+    border-radius: var(--radius);
+    padding: 14px 16px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+  .quick .q .ico {
+    width: 36px; height: 36px;
+    border-radius: 11px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 16px;
+    flex-shrink: 0;
+  }
+  .quick .q .t { font-size: 12px; color: var(--muted); }
+  .quick .q .v { font-size: 16px; font-weight: 700; margin-top: 1px; }
+
+  /* Section label */
+  .sec {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--muted);
+    padding: 8px 4px 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+
+  /* ── Navbar: Home · Plan · Profile (NO nutrition) ── */
+  .navbar {
+    position: absolute;
+    left: 16px; right: 16px; bottom: 20px;
+    height: 64px;
+    background: rgba(24, 24, 24, 0.92);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border-radius: 22px;
+    border: 1px solid rgba(255,255,255,0.06);
+    display: flex;
+    align-items: center;
+    justify-content: space-around;
+    padding: 0 8px;
+    z-index: 10;
+  }
+  .nav-item {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+    color: var(--muted);
+    font-size: 10px;
+    font-weight: 600;
+  }
+  .nav-item.active { color: var(--accent); }
+  .nav-item .ni {
+    width: 28px; height: 28px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 22px;
+  }
+
+  /* Annotations */
+  .annots {
+    max-width: 390px;
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+  .annot {
+    background: #141416;
+    border: 1px solid #222;
+    border-radius: 14px;
+    padding: 12px 14px;
+    font-size: 13px;
+    line-height: 1.45;
+    color: var(--muted);
+  }
+  .annot b { color: var(--text); }
+  .annot .tag {
+    display: inline-block;
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--accent);
+    background: var(--accent-soft);
+    padding: 3px 8px;
+    border-radius: 6px;
+    margin-bottom: 6px;
+  }
+</style>
+</head>
+<body>
+
+<h1 class="page">Letify · Home redesign</h1>
+<p class="note">
+  <strong>Без</strong> пункта «Питание» в навбаре ·
+  <strong>Без</strong> привычек ·
+  <strong>Без</strong> колокольчика уведомлений ·
+  доступ к питанию и воде — с виджетов
+</p>
+
+<div class="phone">
+  <div class="status">
+    <span>18:04</span>
+    <span class="icons">●●●  LTE  🔋</span>
+  </div>
+
+  <div class="scroll">
+    <div class="header">
+      <div class="brand">летифай</div>
+      <div class="date">чт, 23 июля</div>
+    </div>
+
+    <div class="greet">
+      <div class="hi">Добрый вечер</div>
+      <div class="name">Алекс</div>
+    </div>
+
+    <!-- Day progress -->
+    <div class="hero">
+      <div class="hero-left">
+        <div class="hero-label">Прогресс дня</div>
+        <div>
+          <div class="hero-pct">68<span>%</span></div>
+          <div class="hero-sub">План, вода и питание<br/>за сегодня</div>
+        </div>
+      </div>
+      <div class="rings">
+        <div class="ring outer"></div>
+        <div class="ring mid"></div>
+        <div class="ring inner"></div>
+        <div class="ring-center">
+          <div class="n">3</div>
+          <div class="l">цели</div>
+        </div>
+      </div>
+      <div class="legend">
+        <div class="legend-item"><span class="dot" style="background:var(--accent)"></span>План 4/6</div>
+        <div class="legend-item"><span class="dot" style="background:var(--water)"></span>Вода 1.2л</div>
+        <div class="legend-item"><span class="dot" style="background:var(--cal)"></span>Ккал 1420</div>
+      </div>
+    </div>
+
+    <!-- Now -->
+    <div class="sec">Сейчас</div>
+    <div class="now">
+      <div class="pulse">
+        <span style="font-size:18px">◎</span>
+      </div>
+      <div class="body">
+        <div class="tag">Идёт · 25 мин</div>
+        <div class="task-name">Вечерняя тренировка</div>
+        <div class="task-time">18:00 – 19:00</div>
+      </div>
+      <div class="chev">›</div>
+    </div>
+
+    <!-- Widgets -->
+    <div class="sec">Виджеты</div>
+    <div class="grid">
+      <!-- Water -->
+      <div class="widget" style="grid-column: 1 / -1;">
+        <div class="top">
+          <div class="title">
+            <span class="ico" style="background:rgba(90,167,255,0.18);color:var(--water)">💧</span>
+            Вода
+          </div>
+          <span class="chev">›</span>
+        </div>
+        <div class="value">1.25 <small>/ 2.0 л</small></div>
+        <div class="water-bar"><i></i></div>
+        <div class="water-actions">
+          <button class="chip">+100</button>
+          <button class="chip">+250</button>
+          <button class="chip primary">+500 мл</button>
+        </div>
+      </div>
+
+      <!-- Nutrition -->
+      <div class="widget">
+        <div class="top">
+          <div class="title">
+            <span class="ico" style="background:rgba(255,140,90,0.18);color:var(--cal)">🍽</span>
+            Питание
+          </div>
+          <span class="chev">›</span>
+        </div>
+        <div class="value">1420 <small>ккал</small></div>
+        <div class="meta">цель 2100 · осталось 680</div>
+        <div class="macros">
+          <div class="macro">
+            <span class="name">Б</span>
+            <span class="track"><i style="width:72%;background:var(--protein)"></i></span>
+            <span class="num">86г</span>
+          </div>
+          <div class="macro">
+            <span class="name">Ж</span>
+            <span class="track"><i style="width:55%;background:var(--fat)"></i></span>
+            <span class="num">48г</span>
+          </div>
+          <div class="macro">
+            <span class="name">У</span>
+            <span class="track"><i style="width:40%;background:var(--carb)"></i></span>
+            <span class="num">120г</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Plan mini -->
+      <div class="widget">
+        <div class="top">
+          <div class="title">
+            <span class="ico" style="background:var(--accent-soft);color:var(--accent)">✓</span>
+            План
+          </div>
+          <span class="chev">›</span>
+        </div>
+        <div class="value">4 <small>/ 6</small></div>
+        <div class="meta">задач на сегодня</div>
+        <div style="margin-top:auto;padding-top:12px;display:flex;gap:6px;">
+          <span style="flex:1;height:4px;border-radius:99px;background:var(--accent)"></span>
+          <span style="flex:1;height:4px;border-radius:99px;background:var(--accent)"></span>
+          <span style="flex:1;height:4px;border-radius:99px;background:var(--accent)"></span>
+          <span style="flex:1;height:4px;border-radius:99px;background:var(--accent)"></span>
+          <span style="flex:1;height:4px;border-radius:99px;background:var(--track)"></span>
+          <span style="flex:1;height:4px;border-radius:99px;background:var(--track)"></span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Sleep / Weight -->
+    <div class="quick">
+      <div class="q">
+        <div class="ico" style="background:rgba(124,217,146,0.15);color:var(--mint)">☾</div>
+        <div>
+          <div class="t">Сон</div>
+          <div class="v">7ч 20м</div>
+        </div>
+      </div>
+      <div class="q">
+        <div class="ico" style="background:rgba(255,209,102,0.15);color:var(--fat)">⚖</div>
+        <div>
+          <div class="t">Вес</div>
+          <div class="v">72.4 кг</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Navbar: 3 tabs only -->
+  <div class="navbar">
+    <div class="nav-item active">
+      <div class="ni">⌂</div>
+      Главная
+    </div>
+    <div class="nav-item">
+      <div class="ni">☰</div>
+      План
+    </div>
+    <div class="nav-item">
+      <div class="ni">◉</div>
+      Профиль
+    </div>
+  </div>
+</div>
+
+<div class="annots">
+  <div class="annot">
+    <div class="tag">Навбар</div>
+    <b>3 пункта:</b> Главная · План · Профиль.<br/>
+    «Питание» убрано — вход только с виджета на главной.
+  </div>
+  <div class="annot">
+    <div class="tag">Главная</div>
+    <b>Нет</b> привычек · <b>нет</b> колокольчика уведомлений.<br/>
+    Есть: прогресс дня, текущая задача, вода (быстрые +мл), питание (ккал + БЖУ), план, сон, вес.
+  </div>
+  <div class="annot">
+    <div class="tag">Вода</div>
+    Широкий виджет с прогресс-баром и чипами <b>+100 / +250 / +500</b> — лог в один тап, без перехода.
+  </div>
+  <div class="annot">
+    <div class="tag">Питание</div>
+    Карточка-сводка → тап открывает бывший экран Nutrition (как overlay / push).
+  </div>
+</div>
+
+</body>
+</html>

@@ -73,13 +73,19 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 
 @Composable
-fun NutritionScreen(onAddMeal: () -> Unit = {}, onWaterHistory: () -> Unit = {}) {
+fun NutritionScreen(
+    onAddMeal: () -> Unit = {},
+    onWaterHistory: () -> Unit = {},
+    onBack: (() -> Unit)? = null,
+) {
     var tab by remember { mutableStateOf("water") }
 
     ScreenScaffold(
         pinnedHeader = {
             ScreenHeader(
                 title = "питание",
+                leadingIcon = if (onBack != null) "alt-arrow-left-outline" else null,
+                onLeadingClick = onBack ?: {},
                 trailingIcon = "add-bold",
                 trailingAccent = true,
                 onTrailingClick = onAddMeal,

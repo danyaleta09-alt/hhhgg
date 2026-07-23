@@ -20,6 +20,8 @@ import com.letify.app.ui.theme.Letify
 fun ScreenHeader(
     title: String,
     subtitle: String? = null,
+    leadingIcon: String? = null,
+    onLeadingClick: () -> Unit = {},
     trailingIcon: String? = null,
     trailingAccent: Boolean = false,
     trailingGhost: Boolean = true,

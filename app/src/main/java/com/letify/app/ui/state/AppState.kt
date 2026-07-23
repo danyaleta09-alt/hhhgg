@@ -396,7 +396,7 @@ class AppState(
 
     // Navbar configuration — order of items and which tab opens by default.
     val navbarOrder: SnapshotStateList<Tab> = mutableStateListOf(
-        Tab.Home, Tab.Nutrition, Tab.Plan, Tab.Profile,
+        Tab.Home, Tab.Plan, Tab.Profile,
     )
     // Default landing tab — persisted so the user's pick on Оформление → Навбар
     // survives a relaunch (was in-memory only, so it reset to Главная).
@@ -404,11 +404,13 @@ class AppState(
     var defaultTab: Tab
         get() = _defaultTab.value
         set(v) { _defaultTab.value = v; dataStore?.saveDefaultTab(v.key) }
-    var currentTab by mutableStateOf(_defaultTab.value)
+    var currentTab by mutableStateOf(
+        _defaultTab.value.let { if (it == Tab.Nutrition) Tab.Home else it },
+    )
 
     /** The factory navbar layout — order + default landing tab. */
     private val defaultNavbarOrder: List<Tab> =
-        listOf(Tab.Home, Tab.Nutrition, Tab.Plan, Tab.Profile)
+        listOf(Tab.Home, Tab.Plan, Tab.Profile)
 
     /** Restore the navbar order and default tab to their factory values. */
     fun resetNavbar() {
@@ -818,12 +820,14 @@ class AppState(
     val kcalGoal: Int get() = kcalTarget
 
     fun overallProgress(): Float {
-        val w = waterMl.toFloat() / waterTarget
-        val k = kcal.toFloat() / kcalTarget
-        val today = habitsToday()
-        val habitsP = if (today.isEmpty()) 0f else
-            today.count { it.isDoneOn(Dates.todayKey()) }.toFloat() / today.size
-        return ((w + k + habitsP) / 3f).coerceIn(0f, 1f)
+        val w = (waterMl.toFloat() / waterTarget.coerceAtLeast(1)).coerceIn(0f, 1f)
+        val k = (kcal.toFloat() / kcalTarget.coerceAtLeast(1)).coerceIn(0f, 1f)
+        val today = tasksToday()
+        val nowMin = java.time.LocalTime.now().toSecondOfDay() / 60
+        val dateKey = Dates.todayKey()
+        val planP = if (today.isEmpty()) 0f else
+            today.count { it.statusAt(nowMin, dateKey) == TaskStatus.Done }.toFloat() / today.size
+        return ((w + k + planP) / 3f).coerceIn(0f, 1f)
     }
 }
 
