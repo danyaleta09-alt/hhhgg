@@ -12,8 +12,8 @@ android {
         applicationId = "com.letify.app"
         minSdk = 26
         targetSdk = 34
-        versionCode = 194
-        versionName = "r194-home-variant-a"
+        versionCode = 196
+        versionName = "r196-compact-cards"
         vectorDrawables { useSupportLibrary = true }
     }
 
@@ -96,6 +96,7 @@ dependencies {
     // Coil + SVG decoder (Coil 2.x — matches imports in SolarIcon.kt)
     implementation("io.coil-kt:coil:2.6.0")
     implementation("io.coil-kt:coil-compose:2.6.0")
+    implementation("com.airbnb.android:lottie-compose:6.5.2")
     // Real frosted-glass background blur for the navbar. On Android
     // 12+ uses the platform RenderEffect blur; on older it gracefully
     // falls back to the bare tint. Pinned to a Compose 1.6 compatible

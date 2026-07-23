@@ -324,7 +324,7 @@ fun LetifyApp() {
                                 onAddWeight = { push(AddOverlay.Weight) },
                                 onOpenNutrition = { push(AddOverlay.NutritionHub) },
                                 onAddSleep = { push(AddOverlay.Sleep) },
-                                onWaterHistory = { push(AddOverlay.WaterHistory) },
+                                onAddMeal = { push(AddOverlay.Nutrition) },
                             )
                             Tab.Nutrition -> {
                                 androidx.compose.runtime.LaunchedEffect(Unit) {
