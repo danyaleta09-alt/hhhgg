@@ -73,7 +73,6 @@ import com.letify.app.ui.state.TransitionStyle
 import com.letify.app.ui.theme.Letify
 import dev.chrisbanes.haze.HazeState
 import dev.chrisbanes.haze.haze
-import androidx.compose.runtime.withFrameNanos
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 
@@ -168,57 +167,47 @@ fun LetifyApp() {
     var overlayStack by remember { mutableStateOf<List<AddOverlay>>(emptyList()) }
     var lastAction by remember { mutableStateOf("init") }
 
-    // Camera sheet — Instagram/Telegram-grade open & close.
+    // Camera sheet motion — hard rule: ZERO camera/HAL work on animation frames.
     //
-    // OPEN:  TextureView binds in parallel with the slide; first real frame
-    //        fades in via StreamState.STREAMING (no black→pop).
-    // CLOSE: 1) freeze last frame to a bitmap  2) drop the live HAL
-    //        3) slide the *static* image away. Zero camera work during the
-    //        animation → zero jank, picture never "vanishes".
-    // Motion reads of cameraProgress happen ONLY inside graphicsLayer
-    // (draw phase) so CameraCaptureScreen is never recomposed per frame.
+    // OPEN:  slide a lightweight shell (no PreviewView, no bind). When the
+    //        slide settles → cameraReady=true → bind + fade-in first frame.
+    // CLOSE: start the slide IMMEDIATELY (no freeze, no bitmap copy, no
+    //        unbind-before-motion). After the sheet is off-screen → unbind
+    //        and dispose. Pre-work before animateTo was the close "лаг".
+    // Progress is read only inside graphicsLayer so the tree isn't
+    // recomposed every frame.
     val cameraScope = rememberCoroutineScope()
     val appContext = LocalContext.current
     var cameraVisible by remember { mutableStateOf(false) }
     val cameraProgress = remember { Animatable(0f) }
     var cameraReady by remember { mutableStateOf(false) }
-    // Signals CameraCaptureScreen to snapshot PreviewView.bitmap before we
-    // tear the surface down.
-    var cameraFreeze by remember { mutableStateOf(false) }
     var cameraAnimJob by remember { mutableStateOf<Job?>(null) }
     LaunchedEffect(Unit) { CameraPrewarm.warm(appContext) }
     val openCamera: () -> Unit = {
         CameraPrewarm.warm(appContext)
         cameraAnimJob?.cancel()
-        cameraFreeze = false
+        cameraReady = false
         cameraVisible = true
-        cameraReady = true
         cameraAnimJob = cameraScope.launch {
             cameraProgress.animateTo(
                 1f,
                 animationSpec = tween(CameraSlideInMs, easing = CameraSlideEasing),
             )
+            // Bind only after motion fully stops.
+            cameraReady = true
         }
     }
     val closeCamera: () -> Unit = {
         cameraAnimJob?.cancel()
+        // Animate IMMEDIATELY — no freeze, no unbind, no bitmap. Unbind runs
+        // only after the sheet is fully off-screen (cameraVisible=false).
         cameraAnimJob = cameraScope.launch {
-            // 1. Ask for a freeze-frame while the live surface is still up.
-            cameraFreeze = true
-            // 2. Two frames: LaunchedEffect captures bitmap + composition
-            //    swaps live TextureView → static Image.
-            withFrameNanos { }
-            withFrameNanos { }
-            // 3. Release the camera HAL — the frozen image stays on screen.
-            cameraReady = false
-            // 4. Slide the sheet (with the frozen picture) off-screen.
             cameraProgress.animateTo(
                 0f,
                 animationSpec = tween(CameraSlideOutMs, easing = CameraSlideEasing),
             )
-            // 5. Tear down composition only once it's fully gone.
+            cameraReady = false
             cameraVisible = false
-            cameraFreeze = false
         }
     }
     val overlay: AddOverlay? = overlayStack.lastOrNull()
@@ -520,7 +509,6 @@ fun LetifyApp() {
                         onBack = closeCamera,
                         onCaptured = {},
                         readyToBind = cameraReady,
-                        freezeFrame = cameraFreeze,
                     )
                 }
             }

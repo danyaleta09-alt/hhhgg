@@ -12,8 +12,8 @@ android {
         applicationId = "com.letify.app"
         minSdk = 26
         targetSdk = 34
-        versionCode = 178
-        versionName = "r178-camera-freeze-frame"
+        versionCode = 179
+        versionName = "r179-camera-anim-first"
         vectorDrawables { useSupportLibrary = true }
     }
 

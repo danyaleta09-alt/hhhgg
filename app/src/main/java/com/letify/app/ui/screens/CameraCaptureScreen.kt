@@ -2,7 +2,6 @@ package com.letify.app.ui.screens
 
 import android.Manifest
 import android.content.pm.PackageManager
-import android.graphics.Bitmap
 import android.net.Uri
 import android.util.Log
 import android.view.ViewGroup
@@ -31,7 +30,6 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.gestures.detectTapGestures
@@ -66,8 +64,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.ImageBitmap
-import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
@@ -101,14 +97,10 @@ private const val LENS_FADE_MIN_ALPHA = 0.35f
 fun CameraCaptureScreen(
     onBack: () -> Unit,
     onCaptured: () -> Unit = {},
-    // Live bind gate. Host keeps this true while the sheet is visible;
-    // drops it only AFTER a freeze-frame has been captured so the user
-    // never sees the live surface die mid-slide.
+    // False while the sheet is sliding open — no PreviewView, no bind.
+    // Flipped true only after open settles. Stays true during close slide;
+    // host disposes the screen after it's off-screen.
     readyToBind: Boolean = true,
-    // Host flips this true at the start of close. We snapshot
-    // PreviewView.bitmap → frozen ImageBitmap; the sheet then slides
-    // away with that static picture while the HAL is released.
-    freezeFrame: Boolean = false,
 ) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
@@ -145,9 +137,6 @@ fun CameraCaptureScreen(
 
     // Live preview opacity — 0 until StreamState.STREAMING, then eased in.
     val previewAlpha = remember { Animatable(0f) }
-    // Last live frame, frozen at close-start so the sheet can slide away
-    // without a live Surface/TextureView (and without a black flash).
-    var frozenBitmap by remember { mutableStateOf<ImageBitmap?>(null) }
 
     var lensFacing by remember { mutableIntStateOf(CameraSelector.LENS_FACING_BACK) }
     var isRecording by remember { mutableStateOf(false) }
@@ -178,37 +167,16 @@ fun CameraCaptureScreen(
     var previewView by remember { mutableStateOf<PreviewView?>(null) }
     var bindGeneration by remember { mutableIntStateOf(0) }
 
-    // ── Freeze-frame on close ────────────────────────────────────────
-    // Snapshot the last painted frame while the TextureView is still live.
-    // Host waits ~2 frames after flipping freezeFrame, then drops
-    // readyToBind (unbind) — the static Image stays and rides the slide-out.
-    LaunchedEffect(freezeFrame) {
-        if (freezeFrame) {
-            // Stop any in-flight recording so finalize doesn't race unbind.
-            runCatching { activeRecording?.stop() }
-            activeRecording = null
-            isRecording = false
-            val view = previewView
-            val src: Bitmap? = runCatching { view?.bitmap }.getOrNull()
-            if (src != null && !src.isRecycled && src.width > 1 && src.height > 1) {
-                val config = src.config ?: Bitmap.Config.ARGB_8888
-                val copy = runCatching { src.copy(config, false) }.getOrNull()
-                if (copy != null) {
-                    frozenBitmap = copy.asImageBitmap()
-                    // Fully opaque — freeze replaces the live fade pipeline.
-                    previewAlpha.snapTo(1f)
-                }
-            }
-        } else {
-            frozenBitmap = null
+    // Reset fade when bind is dropped (host closed / open cancelled).
+    LaunchedEffect(readyToBind) {
+        if (!readyToBind) {
+            previewAlpha.snapTo(0f)
+            previewView = null
         }
     }
 
-    // Bind as soon as the PreviewView exists. readyToBind stays true for the
-    // whole open+close slide so the live TextureView rides translationY —
-    // picture never snaps to black. Fade-in waits for StreamState.STREAMING
-    // (first real frame), not bindToLifecycle return — that was the "резко
-    // появилась картинка" pop: alpha hit 1 before any frame was on screen.
+    // Bind only while readyToBind (after open slide settles). Fade-in waits
+    // for StreamState.STREAMING so the first painted frame eases in.
     DisposableEffect(readyToBind, lensFacing, previewView, lifecycleOwner, bindGeneration, hasCamera) {
         val view = previewView
         if (!readyToBind || view == null || !hasCamera) {
@@ -410,19 +378,9 @@ fun CameraCaptureScreen(
                 .padding(top = 8.dp)
                 .clip(RoundedCornerShape(14.dp)),
         ) {
-            // Display priority:
-            //  1. Frozen last frame (close in progress) — static, zero HAL cost
-            //  2. Live TextureView while readyToBind — rides open slide, fades
-            //     in on StreamState.STREAMING
-            val frozen = frozenBitmap
-            if (frozen != null) {
-                Image(
-                    bitmap = frozen,
-                    contentDescription = null,
-                    contentScale = ContentScale.Crop,
-                    modifier = Modifier.fillMaxSize(),
-                )
-            } else if (hasCamera && readyToBind) {
+            // PreviewView only after open slide settles (readyToBind).
+            // During the open animation this plate stays black — zero HAL.
+            if (hasCamera && readyToBind) {
                 AndroidView(
                     factory = { ctx ->
                         PreviewView(ctx).apply {
