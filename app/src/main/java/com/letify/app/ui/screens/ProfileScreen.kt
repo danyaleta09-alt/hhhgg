@@ -62,6 +62,7 @@ import com.letify.app.ui.theme.LetifyColors
  */
 @Composable
 fun ProfileScreen(
+    onBack: () -> Unit = {},
     onEditProfile: () -> Unit = {},
     onGoals: () -> Unit = {},
     onAppearance: () -> Unit = {},
@@ -80,6 +81,14 @@ fun ProfileScreen(
     // camera container-transform grows from exactly this rect.
 
     ScreenScaffold(topPadding = 0.dp) {
+        Row(
+            Modifier.fillMaxWidth().screenHPad().padding(top = 4.dp, bottom = 4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            NoFeedbackButton(onClick = onBack) {
+                Text("←", color = Letify.colors.text, style = Letify.typography.titleLarge)
+            }
+        }
         // Pencil edit button anchored top-right with no surrounding plate.
         // Sits flush with the status bar — matches Telegram's profile
         // header where the chrome row hugs the top edge.

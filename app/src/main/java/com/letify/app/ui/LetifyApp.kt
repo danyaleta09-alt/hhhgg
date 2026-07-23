@@ -39,7 +39,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
-import com.letify.app.ui.components.Navbar
 import com.letify.app.ui.components.NoFeedbackButton
 import com.letify.app.ui.components.OverlayHost
 import com.letify.app.ui.components.overlayHostShiftFraction
@@ -325,6 +324,9 @@ fun LetifyApp() {
                                 onOpenNutrition = { push(AddOverlay.NutritionHub) },
                                 onAddSleep = { push(AddOverlay.Sleep) },
                                 onAddMeal = { push(AddOverlay.Nutrition) },
+                                onOpenProfile = { state.currentTab = Tab.Profile },
+                                onOpenPlan = { state.currentTab = Tab.Plan },
+                                onOpenMoments = { push(AddOverlay.Media) },
                             )
                             Tab.Nutrition -> {
                                 androidx.compose.runtime.LaunchedEffect(Unit) {
@@ -333,12 +335,14 @@ fun LetifyApp() {
                                 Box(Modifier.fillMaxSize())
                             }
                             Tab.Plan -> PlanScreen(
+                                onBack = { state.currentTab = Tab.Home },
                                 onAddHabit = { push(AddOverlay.Habit()) },
                                 onAddTask = { push(AddOverlay.Task()) },
                                 onEditHabit = { id -> push(AddOverlay.Habit(id)) },
                                 onEditTask = { id -> push(AddOverlay.Task(id)) },
                             )
                             Tab.Profile -> ProfileScreen(
+                                onBack = { state.currentTab = Tab.Home },
                                 onEditProfile = { push(AddOverlay.EditProfile) },
                                 onGoals = { push(AddOverlay.Goals) },
                                 onAppearance = { push(AddOverlay.Appearance) },
@@ -355,35 +359,6 @@ fun LetifyApp() {
                 }
             }
 
-            // Navbar — INSIDE OverlayHost so it rides the same canvas. Drawn
-            // after the tab content (so it sits above it) but before the
-            // overlays (added below as later siblings) so any open screen
-            // covers it. It now slides away WITH the tab content during a
-            // push, and its blur source moves in lockstep with it so the
-            // frosted backdrop stays calm (no per-frame "dancing" jank).
-            // When a long-press "peek" menu is open on the Plan screen, the
-            // bottom navbar must NOT carry its own blur pass (its frosted-glass
-            // haze read as a distinct, self-blurred panel) and must NOT vanish
-            // (its icons would just disappear). Instead the bar stays fully in
-            // place with its icons, drops its frosted blur, and is darkened by
-            // the SAME theme-coloured dim as the rest of the screen — one single
-            // uniform dim that also covers the navbar.
-            Navbar(
-                current = state.currentTab,
-                onSelect = { state.currentTab = it },
-                modifier = Modifier.align(Alignment.BottomCenter),
-                hazeState = hazeState,
-                // Lambda (not a plain Bool) so reading the flag doesn't
-                // recompose the whole navbar subtree — only the backdrop
-                // Crossfade observes it. Also drop the frosted blur while a
-                // peek is open so the bar can't "blur within itself".
-                tabAnimating = { !tabSettled || state.peekActive },
-                // The SAME dim driver as the background scrim, read at draw
-                // time: the Plan screen publishes its peek-transition value to
-                // state.peekDim every frame, so the bar and the background dim
-                // and undim in perfect lockstep (no lag, especially on close).
-                peekDim = { state.peekDim },
-            )
         }
 
         // Underlay — only the second-from-top overlay, rendered

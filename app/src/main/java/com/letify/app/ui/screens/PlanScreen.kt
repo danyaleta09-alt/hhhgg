@@ -69,6 +69,7 @@ import com.letify.app.ui.components.ProgressRing
 import com.letify.app.ui.components.ScreenHorizontalPadding
 import com.letify.app.ui.components.SectionTitle
 import com.letify.app.ui.components.rememberElasticOverscroll
+import com.letify.app.ui.components.NoFeedbackButton
 import com.letify.app.ui.components.screenHPad
 import com.letify.app.ui.icons.SolarIcon
 import com.letify.app.ui.state.Dates
@@ -234,6 +235,7 @@ private val LocalPlanInteraction = compositionLocalOf<PlanInteraction?> { null }
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun PlanScreen(
+    onBack: () -> Unit = {},
     onAddHabit: () -> Unit = {},
     onAddTask: () -> Unit = {},
     onEditHabit: (Int) -> Unit = {},
@@ -687,6 +689,13 @@ fun PlanScreen(
                 color = Letify.colors.text,
                 style = Letify.typography.displayMedium,
             )
+            // Back to home (navbar removed)
+            NoFeedbackButton(
+                onClick = onBack,
+                modifier = Modifier.align(Alignment.CenterStart),
+            ) {
+                Text("←", color = Letify.colors.text, style = Letify.typography.titleLarge)
+            }
         }
 
         // ------------- LAYER 4 : long-press context menu (peek) ---------------
