@@ -1001,9 +1001,6 @@ fun CameraCaptureScreen(
     }
 }
 
-    }
-}
-
 /**
  * Floating tools island — flash, timer, zoom, exposure, dual-camera.
  */
