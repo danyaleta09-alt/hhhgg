@@ -349,13 +349,15 @@ fun CameraCaptureScreen(
         }
     }
 
-    Box(Modifier.fillMaxSize().background(Color.Black)) {
-        // Preview — near full-bleed, Telegram-style: fills the whole sheet
-        // edge-to-edge with just rounded corners, not a small letterboxed
-        // card floating in the middle of a black screen.
+    // Telegram-style layout: a rounded preview card that does NOT fill the
+    // whole screen, with a dedicated control bar (thumbnail / shutter /
+    // flip / hint) underneath it in the black area — not overlaid on top
+    // of the live feed.
+    Column(Modifier.fillMaxSize().background(Color.Black)) {
         Box(
             Modifier
-                .fillMaxSize()
+                .weight(1f)
+                .fillMaxWidth()
                 .clip(RoundedCornerShape(28.dp)),
         ) {
             if (hasCamera) {
@@ -389,7 +391,6 @@ fun CameraCaptureScreen(
                 exit = fadeOut(tween(120)),
                 modifier = Modifier
                     .align(Alignment.TopCenter)
-                    .windowInsetsPadding(WindowInsets.statusBars)
                     .padding(top = 14.dp),
             ) {
                 Row(
@@ -408,58 +409,58 @@ fun CameraCaptureScreen(
                     )
                 }
             }
-        }
 
-        if (!hasCamera) {
-            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text("Нужен доступ к камере", color = Color.White, style = Letify.typography.titleMedium)
-                    Spacer(Modifier.height(14.dp))
-                    NoFeedbackButton(
-                        onClick = {
-                            permissionLauncher.launch(
-                                arrayOf(Manifest.permission.CAMERA, Manifest.permission.RECORD_AUDIO),
-                            )
-                        },
-                    ) {
-                        Box(
-                            Modifier
-                                .background(Color.White, RoundedCornerShape(14.dp))
-                                .padding(horizontal = 18.dp, vertical = 10.dp),
+            if (!hasCamera) {
+                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text("Нужен доступ к камере", color = Color.White, style = Letify.typography.titleMedium)
+                        Spacer(Modifier.height(14.dp))
+                        NoFeedbackButton(
+                            onClick = {
+                                permissionLauncher.launch(
+                                    arrayOf(Manifest.permission.CAMERA, Manifest.permission.RECORD_AUDIO),
+                                )
+                            },
                         ) {
-                            Text("Разрешить", color = Color.Black, fontWeight = FontWeight.SemiBold)
+                            Box(
+                                Modifier
+                                    .background(Color.White, RoundedCornerShape(14.dp))
+                                    .padding(horizontal = 18.dp, vertical = 10.dp),
+                            ) {
+                                Text("Разрешить", color = Color.Black, fontWeight = FontWeight.SemiBold)
+                            }
                         }
                     }
                 }
             }
-        }
 
-        // Top: close only
-        NoFeedbackButton(
-            onClick = onBack,
-            modifier = Modifier
-                .align(Alignment.TopStart)
-                .windowInsetsPadding(WindowInsets.statusBars)
-                .padding(start = 16.dp, top = 12.dp)
-                .size(44.dp),
-        ) {
-            Box(
-                Modifier
-                    .fillMaxSize()
-                    .background(Color.Black.copy(alpha = 0.4f), CircleShape),
-                contentAlignment = Alignment.Center,
+            // Close — overlaid on the preview, top-left.
+            NoFeedbackButton(
+                onClick = onBack,
+                modifier = Modifier
+                    .align(Alignment.TopStart)
+                    .windowInsetsPadding(WindowInsets.statusBars)
+                    .padding(start = 16.dp, top = 12.dp)
+                    .size(44.dp),
             ) {
-                SolarIcon(name = "alt-arrow-left-outline", tint = Color.White, size = 22.dp)
+                Box(
+                    Modifier
+                        .fillMaxSize()
+                        .background(Color.Black.copy(alpha = 0.4f), CircleShape),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    SolarIcon(name = "alt-arrow-left-outline", tint = Color.White, size = 22.dp)
+                }
             }
         }
 
-        // Bottom controls row
+        // Control bar — lives in the black area below the preview, not on
+        // top of the live feed.
         Box(
             Modifier
-                .align(Alignment.BottomCenter)
                 .fillMaxWidth()
                 .padding(horizontal = 28.dp)
-                .padding(bottom = 28.dp),
+                .padding(top = 18.dp, bottom = 16.dp),
         ) {
             // Last shot thumbnail (bottom-left) — stays on camera after capture
             Box(
@@ -582,7 +583,7 @@ fun CameraCaptureScreen(
             color = Color.White.copy(alpha = 0.45f),
             fontSize = 11.sp,
             modifier = Modifier
-                .align(Alignment.BottomCenter)
+                .align(Alignment.CenterHorizontally)
                 .padding(bottom = 10.dp),
         )
     }
