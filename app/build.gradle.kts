@@ -12,8 +12,8 @@ android {
         applicationId = "com.letify.app"
         minSdk = 26
         targetSdk = 34
-        versionCode = 182
-        versionName = "r182-blur-exposure-smooth"
+        versionCode = 183
+        versionName = "r183-camera-tools-island"
         vectorDrawables { useSupportLibrary = true }
     }
 

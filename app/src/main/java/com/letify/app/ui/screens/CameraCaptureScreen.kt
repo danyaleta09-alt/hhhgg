@@ -90,7 +90,6 @@ import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
-import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
@@ -165,6 +164,14 @@ fun CameraCaptureScreen(
     var exposureMin by remember { mutableIntStateOf(0) }
     var exposureMax by remember { mutableIntStateOf(0) }
     var zoomRatio by remember { mutableFloatStateOf(1f) }
+    var minZoom by remember { mutableFloatStateOf(1f) }
+    var maxZoom by remember { mutableFloatStateOf(1f) }
+    // Tools island: flash / timer / zoom / exposure toggle
+    var toolsOpen by remember { mutableStateOf(false) }
+    var showExposure by remember { mutableStateOf(false) }
+    var flashMode by remember { mutableIntStateOf(ImageCapture.FLASH_MODE_OFF) }
+    var timerSec by remember { mutableIntStateOf(0) } // 0, 3, 10
+    var timerRemaining by remember { mutableIntStateOf(0) }
     var recordSeconds by remember { mutableIntStateOf(0) }
 
     LaunchedEffect(isRecording) {
@@ -241,12 +248,13 @@ fun CameraCaptureScreen(
                         return@addListener
                     }
                     boundCamera = cam
-                    cam?.cameraControl?.setZoomRatio(
-                        zoomRatio.coerceIn(
-                            cam.cameraInfo.zoomState.value?.minZoomRatio ?: 1f,
-                            cam.cameraInfo.zoomState.value?.maxZoomRatio ?: 1f,
-                        ),
-                    )
+                    val zState = cam?.cameraInfo?.zoomState?.value
+                    minZoom = zState?.minZoomRatio ?: 1f
+                    maxZoom = zState?.maxZoomRatio ?: 1f
+                    val zr = zoomRatio.coerceIn(minZoom, maxZoom)
+                    zoomRatio = zr
+                    cam?.cameraControl?.setZoomRatio(zr)
+                    imageCapture.flashMode = flashMode
                     val expState = cam?.cameraInfo?.exposureState
                     if (expState != null && expState.isExposureCompensationSupported) {
                         val range = expState.exposureCompensationRange
@@ -294,9 +302,10 @@ fun CameraCaptureScreen(
     fun stamp(): String =
         SimpleDateFormat("yyyyMMdd_HHmmss_SSS", Locale.US).format(Date())
 
-    fun takePhoto() {
+    fun doTakePhoto() {
         if (captureBusy || isRecording || boundCamera == null) return
         captureBusy = true
+        imageCapture.flashMode = flashMode
         scope.launch {
             shutterFlash.snapTo(0.55f)
             shutterFlash.animateTo(0f, tween(220))
@@ -325,6 +334,22 @@ fun CameraCaptureScreen(
                 }
             },
         )
+    }
+
+    fun takePhoto() {
+        if (captureBusy || isRecording || boundCamera == null || timerRemaining > 0) return
+        if (timerSec <= 0) {
+            doTakePhoto()
+            return
+        }
+        scope.launch {
+            for (i in timerSec downTo 1) {
+                timerRemaining = i
+                delay(1000)
+            }
+            timerRemaining = 0
+            doTakePhoto()
+        }
     }
 
     fun startVideo() {
@@ -392,21 +417,43 @@ fun CameraCaptureScreen(
         }
     }
 
-    // Job used to throttle HAL writes — applying EV every drag pixel was what
-    // made the rail stutter and the exposure jump in steps.
-    var exposureJob by remember { mutableStateOf<Job?>(null) }
-
     fun setExposure(index: Int) {
         if (exposureMax <= exposureMin) return
         val idx = index.coerceIn(exposureMin, exposureMax)
+        if (idx == exposureIndex) return
         exposureIndex = idx
-        exposureJob?.cancel()
-        exposureJob = scope.launch {
-            delay(32) // ~30 Hz max to the camera HAL
-            runCatching {
-                boundCamera?.cameraControl?.setExposureCompensationIndex(exposureIndex)
-            }
+        // Apply immediately — EV steps are few (−4…+4); lag came from
+        // spamming the HAL on every drag pixel, not from instantaneous apply.
+        runCatching {
+            boundCamera?.cameraControl?.setExposureCompensationIndex(idx)
         }
+    }
+
+    fun cycleFlash() {
+        flashMode = when (flashMode) {
+            ImageCapture.FLASH_MODE_OFF -> ImageCapture.FLASH_MODE_ON
+            ImageCapture.FLASH_MODE_ON -> ImageCapture.FLASH_MODE_AUTO
+            else -> ImageCapture.FLASH_MODE_OFF
+        }
+        imageCapture.flashMode = flashMode
+        // Torch for continuous light when ON and not using capture flash only
+        runCatching {
+            boundCamera?.cameraControl?.enableTorch(flashMode == ImageCapture.FLASH_MODE_ON)
+        }
+    }
+
+    fun cycleTimer() {
+        timerSec = when (timerSec) {
+            0 -> 3
+            3 -> 10
+            else -> 0
+        }
+    }
+
+    fun setZoom(ratio: Float) {
+        val r = ratio.coerceIn(minZoom, maxZoom)
+        zoomRatio = r
+        runCatching { boundCamera?.cameraControl?.setZoomRatio(r) }
     }
 
     // Telegram-style layout: preview card sits BELOW the status bar with a
@@ -535,8 +582,7 @@ fun CameraCaptureScreen(
                 }
             }
 
-            // Close — overlaid on the preview, top-left.
-            // Status-bar inset is already applied on the parent Column.
+            // Close — top-left.
             NoFeedbackButton(
                 onClick = onBack,
                 modifier = Modifier
@@ -554,9 +600,55 @@ fun CameraCaptureScreen(
                 }
             }
 
-            // Exposure compensation (яркость) — vertical rail on the right,
-            // Telegram-style: sun icon + track, drag up = brighter.
-            if (boundCamera != null && exposureMax > exposureMin) {
+            // Tools button — top-right; opens the island menu.
+            NoFeedbackButton(
+                onClick = { toolsOpen = !toolsOpen },
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .padding(end = 12.dp, top = 10.dp)
+                    .size(40.dp),
+            ) {
+                Box(
+                    Modifier
+                        .fillMaxSize()
+                        .background(
+                            if (toolsOpen) Color.White.copy(alpha = 0.28f)
+                            else Color.Black.copy(alpha = 0.4f),
+                            CircleShape,
+                        ),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    SolarIcon(name = "menu-dots-bold", tint = Color.White, size = 20.dp)
+                }
+            }
+
+            // Tools island — compact card under the dots button.
+            if (toolsOpen) {
+                CameraToolsIsland(
+                    flashMode = flashMode,
+                    timerSec = timerSec,
+                    minZoom = minZoom,
+                    zoomRatio = zoomRatio,
+                    showExposure = showExposure,
+                    exposureSupported = exposureMax > exposureMin,
+                    onFlash = { cycleFlash() },
+                    onTimer = { cycleTimer() },
+                    onZoom = { setZoom(it) },
+                    onExposureToggle = {
+                        showExposure = !showExposure
+                        if (!showExposure) {
+                            // Reset EV when hiding
+                            setExposure(0)
+                        }
+                    },
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .padding(top = 56.dp, end = 12.dp),
+                )
+            }
+
+            // Exposure rail — only when enabled from the island.
+            if (showExposure && boundCamera != null && exposureMax > exposureMin) {
                 ExposureRail(
                     index = exposureIndex,
                     min = exposureMin,
@@ -566,6 +658,24 @@ fun CameraCaptureScreen(
                         .align(Alignment.CenterEnd)
                         .padding(end = 10.dp),
                 )
+            }
+
+            // Timer countdown — large center numeral while waiting.
+            if (timerRemaining > 0) {
+                Box(
+                    Modifier
+                        .align(Alignment.Center)
+                        .size(88.dp)
+                        .background(Color.Black.copy(alpha = 0.45f), CircleShape),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text(
+                        text = timerRemaining.toString(),
+                        color = Color.White,
+                        fontSize = 40.sp,
+                        fontWeight = FontWeight.Bold,
+                    )
+                }
             }
         }
 
@@ -705,9 +815,155 @@ fun CameraCaptureScreen(
 }
 
 /**
- * Vertical exposure rail. Thumb follows the finger in *float* space every
- * frame (smooth); integer EV is reported via [onChange] only when the
- * quantised index actually changes (host throttles HAL writes further).
+ * Floating tools island — flash, timer, zoom, exposure toggle.
+ */
+@Composable
+private fun CameraToolsIsland(
+    flashMode: Int,
+    timerSec: Int,
+    minZoom: Float,
+    zoomRatio: Float,
+    showExposure: Boolean,
+    exposureSupported: Boolean,
+    onFlash: () -> Unit,
+    onTimer: () -> Unit,
+    onZoom: (Float) -> Unit,
+    onExposureToggle: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val flashLabel = when (flashMode) {
+        ImageCapture.FLASH_MODE_ON -> "Вкл"
+        ImageCapture.FLASH_MODE_AUTO -> "Авто"
+        else -> "Выкл"
+    }
+    val timerLabel = when (timerSec) {
+        3 -> "3 с"
+        10 -> "10 с"
+        else -> "Выкл"
+    }
+    val hasUltra = minZoom < 0.95f
+
+    Column(
+        modifier = modifier
+            .width(168.dp)
+            .background(Color.Black.copy(alpha = 0.72f), RoundedCornerShape(18.dp))
+            .padding(vertical = 6.dp),
+    ) {
+        ToolsRow(
+            icon = "fire-outline",
+            title = "Вспышка",
+            value = flashLabel,
+            active = flashMode != ImageCapture.FLASH_MODE_OFF,
+            onClick = onFlash,
+        )
+        ToolsRow(
+            icon = "stopwatch-bold-duotone",
+            title = "Таймер",
+            value = timerLabel,
+            active = timerSec > 0,
+            onClick = onTimer,
+        )
+        // Zoom row — chips
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 12.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween,
+        ) {
+            Text("Зум", color = Color.White.copy(alpha = 0.7f), fontSize = 13.sp)
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                if (hasUltra) {
+                    ZoomChip(
+                        label = String.format("%.1f×", minZoom).replace(',', '.'),
+                        selected = zoomRatio <= (minZoom + 1f) / 2f,
+                        onClick = { onZoom(minZoom) },
+                    )
+                }
+                ZoomChip(
+                    label = "1×",
+                    selected = zoomRatio in 0.95f..1.15f || (!hasUltra && zoomRatio < 1.5f),
+                    onClick = { onZoom(1f.coerceIn(minZoom, maxOf(minZoom, 1f))) },
+                )
+            }
+        }
+        if (exposureSupported) {
+            ToolsRow(
+                icon = "sun-bold",
+                title = "Яркость",
+                value = if (showExposure) "Откр." else "Закр.",
+                active = showExposure,
+                onClick = onExposureToggle,
+            )
+        }
+    }
+}
+
+@Composable
+private fun ToolsRow(
+    icon: String,
+    title: String,
+    value: String,
+    active: Boolean,
+    onClick: () -> Unit,
+) {
+    NoFeedbackButton(onClick = onClick, modifier = Modifier.fillMaxWidth()) {
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 12.dp, vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            SolarIcon(
+                name = icon,
+                tint = if (active) Color.White else Color.White.copy(alpha = 0.75f),
+                size = 18.dp,
+            )
+            Spacer(Modifier.width(10.dp))
+            Text(
+                title,
+                color = Color.White,
+                fontSize = 13.sp,
+                modifier = Modifier.weight(1f),
+            )
+            Text(
+                value,
+                color = if (active) Color(0xFFFFD60A) else Color.White.copy(alpha = 0.55f),
+                fontSize = 12.sp,
+                fontWeight = FontWeight.SemiBold,
+            )
+        }
+    }
+}
+
+@Composable
+private fun ZoomChip(
+    label: String,
+    selected: Boolean,
+    onClick: () -> Unit,
+) {
+    NoFeedbackButton(onClick = onClick) {
+        Box(
+            Modifier
+                .background(
+                    if (selected) Color.White else Color.White.copy(alpha = 0.12f),
+                    RoundedCornerShape(999.dp),
+                )
+                .padding(horizontal = 10.dp, vertical = 5.dp),
+        ) {
+            Text(
+                label,
+                color = if (selected) Color.Black else Color.White,
+                fontSize = 12.sp,
+                fontWeight = FontWeight.SemiBold,
+            )
+        }
+    }
+}
+
+/**
+ * Vertical exposure rail — float thumb, integer EV only when step changes.
+ * Apply is instant on the host so the feed updates in real time.
  */
 @Composable
 private fun ExposureRail(
@@ -718,37 +974,35 @@ private fun ExposureRail(
     modifier: Modifier = Modifier,
 ) {
     val range = (max - min).coerceAtLeast(1)
-    // Local visual 0..1 so the thumb doesn't quantise to EV steps while dragging.
     var visualFrac by remember(min, max) {
         mutableFloatStateOf(((index - min).toFloat() / range).coerceIn(0f, 1f))
     }
-    // Keep visual in sync when exposure is changed externally (lens flip etc.).
+    var dragging by remember { mutableStateOf(false) }
     LaunchedEffect(index, min, max) {
-        val target = ((index - min).toFloat() / range).coerceIn(0f, 1f)
-        // Don't fight an active drag — only snap when the host index moved
-        // without us reporting it (difference > half a step).
-        if (kotlin.math.abs(target - visualFrac) > 0.5f / range) {
-            visualFrac = target
+        if (!dragging) {
+            visualFrac = ((index - min).toFloat() / range).coerceIn(0f, 1f)
         }
     }
 
     fun applyFrac(f: Float) {
         val clamped = f.coerceIn(0f, 1f)
         visualFrac = clamped
-        val idx = min + kotlin.math.round(clamped * range).toInt()
-        onChange(idx)
+        onChange(min + kotlin.math.round(clamped * range).toInt())
     }
 
     Column(
-        modifier = modifier.width(40.dp),
+        modifier = modifier
+            .width(44.dp)
+            .background(Color.Black.copy(alpha = 0.35f), RoundedCornerShape(16.dp))
+            .padding(vertical = 12.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        SolarIcon(name = "sun-bold", tint = Color.White.copy(alpha = 0.9f), size = 18.dp)
-        Spacer(Modifier.height(8.dp))
+        SolarIcon(name = "sun-bold", tint = Color.White.copy(alpha = 0.95f), size = 16.dp)
+        Spacer(Modifier.height(10.dp))
         BoxWithConstraints(
             Modifier
-                .width(36.dp)
-                .height(152.dp)
+                .width(40.dp)
+                .height(160.dp)
                 .pointerInput(min, max) {
                     detectTapGestures { offset ->
                         val y = offset.y.coerceIn(0f, size.height.toFloat())
@@ -757,6 +1011,9 @@ private fun ExposureRail(
                 }
                 .pointerInput(min, max) {
                     detectDragGestures(
+                        onDragStart = { dragging = true },
+                        onDragEnd = { dragging = false },
+                        onDragCancel = { dragging = false },
                         onDrag = { change, _ ->
                             change.consume()
                             val y = change.position.y.coerceIn(0f, size.height.toFloat())
@@ -765,16 +1022,24 @@ private fun ExposureRail(
                     )
                 },
         ) {
-            val thumbR = 7.dp
+            val thumbR = 8.dp
             val travel = maxHeight - thumbR * 2
+            // Track
             Box(
                 Modifier
                     .align(Alignment.Center)
-                    .width(3.dp)
+                    .width(4.dp)
                     .fillMaxHeight()
-                    .background(Color.White.copy(alpha = 0.28f), RoundedCornerShape(999.dp)),
+                    .background(Color.White.copy(alpha = 0.22f), RoundedCornerShape(999.dp)),
             )
-            // graphicsLayer translation = no layout thrash while dragging.
+            // Active fill from bottom to thumb
+            Box(
+                Modifier
+                    .align(Alignment.BottomCenter)
+                    .width(4.dp)
+                    .fillMaxHeight(visualFrac)
+                    .background(Color.White.copy(alpha = 0.7f), RoundedCornerShape(999.dp)),
+            )
             Box(
                 Modifier
                     .align(Alignment.TopCenter)
@@ -785,6 +1050,15 @@ private fun ExposureRail(
                     .background(Color.White, CircleShape),
             )
         }
+        Spacer(Modifier.height(8.dp))
+        // Numeric EV hint
+        val ev = index - ((min + max) / 2) // rough; better show raw index bias
+        Text(
+            text = if (index > 0) "+$index" else "$index",
+            color = Color.White.copy(alpha = 0.7f),
+            fontSize = 11.sp,
+            fontWeight = FontWeight.Medium,
+        )
     }
 }
 
