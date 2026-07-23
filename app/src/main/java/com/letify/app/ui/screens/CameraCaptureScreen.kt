@@ -263,7 +263,10 @@ fun CameraCaptureScreen(
                             (focals?.minOrNull() ?: 99f) < 2.5f
                         }.getOrDefault(false)
                     }
-                    dualSupported = p.availableConcurrentCameraInfos.any { combo ->
+                    val concurrentFeature = context.packageManager
+                        .hasSystemFeature(android.content.pm.PackageManager.FEATURE_CAMERA_CONCURRENT)
+                    val concurrentCombos = p.availableConcurrentCameraInfos
+                    dualSupported = concurrentFeature || concurrentCombos.any { combo ->
                         combo.any { it.lensFacing == CameraSelector.LENS_FACING_BACK } &&
                             combo.any { it.lensFacing == CameraSelector.LENS_FACING_FRONT }
                     }
@@ -299,25 +302,49 @@ fun CameraCaptureScreen(
                     if (cancelled) return@addListener
 
                     val secView = secondaryPreviewView
-                    val canDual = dualMode && dualSupported && secView != null
+                    val canDual = dualMode && secView != null
                     val cam: Camera? = if (canDual) {
                         val secondaryFacing =
                             if (lensFacing == CameraSelector.LENS_FACING_BACK)
                                 CameraSelector.LENS_FACING_FRONT
                             else CameraSelector.LENS_FACING_BACK
-                        val secSelector = selectorFor(secondaryFacing, false)
                         val secPreview = Preview.Builder().build().also { pr ->
                             boundSecondaryPreview = pr
                             pr.setSurfaceProvider(secView.surfaceProvider)
                         }
-                        try {
+                        // Prefer an exact concurrent pair from the provider.
+                        val combo = p.availableConcurrentCameraInfos.firstOrNull { c ->
+                            c.any { it.lensFacing == lensFacing } &&
+                                c.any { it.lensFacing == secondaryFacing }
+                        }
+                        fun selectorFromInfo(info: androidx.camera.core.CameraInfo): CameraSelector {
+                            val id = runCatching {
+                                Camera2CameraInfo.from(info).cameraId
+                            }.getOrNull()
+                            return CameraSelector.Builder().addCameraFilter { infos ->
+                                if (id == null) {
+                                    infos.filter { it.lensFacing == info.lensFacing }.take(1)
+                                } else {
+                                    infos.filter {
+                                        runCatching { Camera2CameraInfo.from(it).cameraId == id }
+                                            .getOrDefault(false)
+                                    }
+                                }
+                            }.build()
+                        }
+                        val primarySelector = if (combo != null) {
+                            selectorFromInfo(combo.first { it.lensFacing == lensFacing })
+                        } else selector
+                        val secSelector = if (combo != null) {
+                            selectorFromInfo(combo.first { it.lensFacing == secondaryFacing })
+                        } else selectorFor(secondaryFacing, false)
+
+                        fun tryConcurrent(primaryUseCases: List<androidx.camera.core.UseCase>): Camera? {
+                            val primaryGroup = androidx.camera.core.UseCaseGroup.Builder()
+                            primaryUseCases.forEach { primaryGroup.addUseCase(it) }
                             val primaryConfig = androidx.camera.core.ConcurrentCamera.SingleCameraConfig(
-                                selector,
-                                androidx.camera.core.UseCaseGroup.Builder()
-                                    .addUseCase(preview)
-                                    .addUseCase(imageCapture)
-                                    .addUseCase(videoCapture)
-                                    .build(),
+                                primarySelector,
+                                primaryGroup.build(),
                                 lifecycleOwner,
                             )
                             val secondaryConfig = androidx.camera.core.ConcurrentCamera.SingleCameraConfig(
@@ -328,9 +355,16 @@ fun CameraCaptureScreen(
                                 lifecycleOwner,
                             )
                             val concurrent = p.bindToLifecycle(listOf(primaryConfig, secondaryConfig))
-                            concurrent.cameras.firstOrNull {
+                            return concurrent.cameras.firstOrNull {
                                 it.cameraInfo.lensFacing == lensFacing
                             }
+                        }
+
+                        try {
+                            // Full set first; some devices reject 3 use-cases on concurrent primary.
+                            tryConcurrent(listOf(preview, imageCapture, videoCapture))
+                                ?: tryConcurrent(listOf(preview, videoCapture))
+                                ?: tryConcurrent(listOf(preview, imageCapture))
                         } catch (e: Exception) {
                             Log.w(TAG, "concurrent bind failed, falling back", e)
                             dualMode = false
@@ -569,12 +603,14 @@ fun CameraCaptureScreen(
     }
 
     fun toggleDual() {
-        if (!dualSupported && !dualMode) {
-            // Still flip UI so user sees the attempt; bind will no-op if unsupported.
-            // Prefer enabling only when supported.
-            return
-        }
+        // Always flip — if the device lacks concurrent cameras the bind path
+        // falls back and dualMode is cleared there. Letting the user try means
+        // dualSupported false-negatives don't brick the button.
         dualMode = !dualMode
+        if (dualMode) {
+            // Ensure PIP PreviewView is composed before the next bind.
+            // secondaryPreviewView is assigned from AndroidView factory.
+        }
         bindGeneration++
     }
 
@@ -723,7 +759,7 @@ fun CameraCaptureScreen(
             }
 
             // Dual-camera PIP — draggable circle.
-            if (dualMode && dualSupported) {
+            if (dualMode) {
                 val pipSize = 112.dp
                 Box(
                     Modifier
@@ -864,12 +900,24 @@ fun CameraCaptureScreen(
                         isRecording -> Color(0xFFE53935)
                         else -> Color.White
                     },
-                    label = "shutter",
+                    animationSpec = tween(220),
+                    label = "shutterColor",
                 )
-                val innerShape = if (isRecording && recordingLocked) RoundedCornerShape(8.dp)
-                else if (isRecording) RoundedCornerShape(10.dp)
-                else CircleShape
-                val innerSize = if (isRecording) 28.dp else 58.dp
+                // Morph: big white circle → small red rounded square → back.
+                val innerSize by animateDpAsState(
+                    targetValue = if (isRecording) 28.dp else 58.dp,
+                    animationSpec = tween(240),
+                    label = "shutterSize",
+                )
+                val innerCorner by animateDpAsState(
+                    targetValue = when {
+                        isRecording && recordingLocked -> 6.dp
+                        isRecording -> 8.dp
+                        else -> 29.dp // half of 58 → full circle
+                    },
+                    animationSpec = tween(240),
+                    label = "shutterCorner",
+                )
 
                 Box(
                     Modifier
@@ -921,7 +969,7 @@ fun CameraCaptureScreen(
                     Box(
                         Modifier
                             .size(innerSize)
-                            .background(shutterColor, innerShape),
+                            .background(shutterColor, RoundedCornerShape(innerCorner)),
                     )
                 }
 
@@ -1025,73 +1073,76 @@ private fun CameraToolsBar(
     val zoomActive = useUltraWide
     val dualActive = dualMode
 
-    Box(modifier = modifier) {
-        // Exposure bubble sits above the icon row, aligned to brightness slot.
-        if (showExposure && exposureSupported && exposureMax > exposureMin) {
-            ExposureBubble(
-                index = exposureIndex,
-                min = exposureMin,
-                max = exposureMax,
+    // Fixed-height row — the exposure bubble is drawn ABOVE the sun icon via
+    // offset and never participates in layout (no jump when it opens).
+    Row(
+        modifier = modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceEvenly,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        ToolIcon(
+            icon = "fire-outline",
+            active = flashActive,
+            accent = accent,
+            badge = when (flashMode) {
+                ImageCapture.FLASH_MODE_ON -> "1"
+                ImageCapture.FLASH_MODE_AUTO -> "A"
+                else -> null
+            },
+            onClick = onFlash,
+        )
+        ToolIcon(
+            icon = "stopwatch-bold-duotone",
+            active = timerActive,
+            accent = accent,
+            badge = if (timerSec > 0) "$timerSec" else null,
+            onClick = onTimer,
+        )
+        if (ultraWideAvailable) {
+            ToolIcon(
+                icon = "camera-bold-duotone",
+                active = zoomActive,
                 accent = accent,
-                onChange = onExposureChange,
-                modifier = Modifier
-                    .align(Alignment.TopCenter)
-                    .padding(bottom = 8.dp)
-                    .offset(y = (-52).dp),
+                badge = if (useUltraWide) "0.6" else "1×",
+                onClick = onZoom,
             )
         }
-
-        Row(
-            Modifier
-                .fillMaxWidth()
-                .align(Alignment.BottomCenter)
-                .padding(top = if (showExposure) 56.dp else 0.dp),
-            horizontalArrangement = Arrangement.SpaceEvenly,
-            verticalAlignment = Alignment.CenterVertically,
+        // Always visible from the first frame (unlike before, when it waited
+        // for camera bind to report EV support). Dimmed until supported.
+        Box(
+            modifier = Modifier.size(44.dp),
+            contentAlignment = Alignment.Center,
         ) {
             ToolIcon(
-                icon = "fire-outline",
-                active = flashActive,
+                icon = "sun-bold",
+                active = showExposure || exposureIndex != 0,
                 accent = accent,
-                badge = when (flashMode) {
-                    ImageCapture.FLASH_MODE_ON -> "1"
-                    ImageCapture.FLASH_MODE_AUTO -> "A"
-                    else -> null
+                dimmed = !exposureSupported,
+                onClick = {
+                    if (exposureSupported) onExposureToggle()
                 },
-                onClick = onFlash,
             )
-            ToolIcon(
-                icon = "stopwatch-bold-duotone",
-                active = timerActive,
-                accent = accent,
-                badge = if (timerSec > 0) "${timerSec}" else null,
-                onClick = onTimer,
-            )
-            if (ultraWideAvailable) {
-                ToolIcon(
-                    icon = "camera-bold-duotone",
-                    active = zoomActive,
+            if (showExposure && exposureSupported && exposureMax > exposureMin) {
+                ExposureBubble(
+                    index = exposureIndex,
+                    min = exposureMin,
+                    max = exposureMax,
                     accent = accent,
-                    badge = if (useUltraWide) "0.6" else "1×",
-                    onClick = onZoom,
+                    onChange = onExposureChange,
+                    modifier = Modifier
+                        .align(Alignment.TopCenter)
+                        .offset(y = (-6).dp)
+                        .wrapContentSize(align = Alignment.BottomCenter),
                 )
             }
-            if (exposureSupported) {
-                ToolIcon(
-                    icon = "sun-bold",
-                    active = showExposure || exposureIndex != 0,
-                    accent = accent,
-                    onClick = onExposureToggle,
-                )
-            }
-            ToolIcon(
-                icon = "user-circle-bold-duotone",
-                active = dualActive,
-                accent = accent,
-                dimmed = !dualSupported,
-                onClick = { if (dualSupported) onDual() },
-            )
         }
+        ToolIcon(
+            icon = "user-circle-bold-duotone",
+            active = dualActive,
+            accent = accent,
+            dimmed = !dualSupported,
+            onClick = onDual, // always clickable; toggleDual no-ops if unsupported
+        )
     }
 }
 

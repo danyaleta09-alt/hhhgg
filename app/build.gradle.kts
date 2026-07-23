@@ -12,8 +12,8 @@ android {
         applicationId = "com.letify.app"
         minSdk = 26
         targetSdk = 34
-        versionCode = 187
-        versionName = "r187-camera-icon-tools"
+        versionCode = 189
+        versionName = "r189-icon-shutter-fix"
         vectorDrawables { useSupportLibrary = true }
     }
 
