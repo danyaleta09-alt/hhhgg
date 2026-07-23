@@ -12,8 +12,8 @@ android {
         applicationId = "com.letify.app"
         minSdk = 26
         targetSdk = 34
-        versionCode = 177
-        versionName = "r177-camera-live-slide"
+        versionCode = 178
+        versionName = "r178-camera-freeze-frame"
         vectorDrawables { useSupportLibrary = true }
     }
 

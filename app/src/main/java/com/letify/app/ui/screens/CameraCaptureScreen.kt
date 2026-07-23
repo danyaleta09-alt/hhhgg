@@ -2,6 +2,7 @@ package com.letify.app.ui.screens
 
 import android.Manifest
 import android.content.pm.PackageManager
+import android.graphics.Bitmap
 import android.net.Uri
 import android.util.Log
 import android.view.ViewGroup
@@ -30,6 +31,7 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.gestures.detectTapGestures
@@ -64,6 +66,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
@@ -97,11 +101,14 @@ private const val LENS_FADE_MIN_ALPHA = 0.35f
 fun CameraCaptureScreen(
     onBack: () -> Unit,
     onCaptured: () -> Unit = {},
-    // True for the whole time the camera sheet is on-screen (open slide,
-    // settled, AND close slide). Host drops it only after the sheet is
-    // off-screen so the live TextureView can ride the translation instead
-    // of being torn down mid-motion (which looked like a hard black cut).
+    // Live bind gate. Host keeps this true while the sheet is visible;
+    // drops it only AFTER a freeze-frame has been captured so the user
+    // never sees the live surface die mid-slide.
     readyToBind: Boolean = true,
+    // Host flips this true at the start of close. We snapshot
+    // PreviewView.bitmap → frozen ImageBitmap; the sheet then slides
+    // away with that static picture while the HAL is released.
+    freezeFrame: Boolean = false,
 ) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
@@ -136,25 +143,19 @@ fun CameraCaptureScreen(
         }
     }
 
-    // ── Open sequence ────────────────────────────────────────────────
-    // The provider is prewarmed (see CameraPrewarm) well before this screen
-    // is even composed, so there's nothing left to gain by waiting — bind
-    // the moment the PreviewView surface exists and let it resolve in the
-    // background while the slide-up animation plays.
+    // Live preview opacity — 0 until StreamState.STREAMING, then eased in.
     val previewAlpha = remember { Animatable(0f) }
+    // Last live frame, frozen at close-start so the sheet can slide away
+    // without a live Surface/TextureView (and without a black flash).
+    var frozenBitmap by remember { mutableStateOf<ImageBitmap?>(null) }
 
     var lensFacing by remember { mutableIntStateOf(CameraSelector.LENS_FACING_BACK) }
     var isRecording by remember { mutableStateOf(false) }
     var captureBusy by remember { mutableStateOf(false) }
-    // Shutter flash: a quick, soft pulse rather than a hard white blink —
-    // instant rise to a modest peak, then an eased fade back out.
     val shutterFlash = remember { Animatable(0f) }
     var lastThumb by remember { mutableStateOf<String?>(null) }
-    // How many photos/videos were captured this time the camera was open.
     var sessionCaptureCount by remember { mutableIntStateOf(0) }
-    // Exposure compensation index (−range..+range); UI ready, applied on bind.
     var exposureBias by remember { mutableFloatStateOf(0f) }
-    // Zoom ratio placeholder for future wide-angle toggle (1f = default).
     var zoomRatio by remember { mutableFloatStateOf(1f) }
     var recordSeconds by remember { mutableIntStateOf(0) }
 
@@ -176,6 +177,32 @@ fun CameraCaptureScreen(
     val cameraExecutor = CameraPrewarm.executor
     var previewView by remember { mutableStateOf<PreviewView?>(null) }
     var bindGeneration by remember { mutableIntStateOf(0) }
+
+    // ── Freeze-frame on close ────────────────────────────────────────
+    // Snapshot the last painted frame while the TextureView is still live.
+    // Host waits ~2 frames after flipping freezeFrame, then drops
+    // readyToBind (unbind) — the static Image stays and rides the slide-out.
+    LaunchedEffect(freezeFrame) {
+        if (freezeFrame) {
+            // Stop any in-flight recording so finalize doesn't race unbind.
+            runCatching { activeRecording?.stop() }
+            activeRecording = null
+            isRecording = false
+            val view = previewView
+            val src: Bitmap? = runCatching { view?.bitmap }.getOrNull()
+            if (src != null && !src.isRecycled && src.width > 1 && src.height > 1) {
+                val config = src.config ?: Bitmap.Config.ARGB_8888
+                val copy = runCatching { src.copy(config, false) }.getOrNull()
+                if (copy != null) {
+                    frozenBitmap = copy.asImageBitmap()
+                    // Fully opaque — freeze replaces the live fade pipeline.
+                    previewAlpha.snapTo(1f)
+                }
+            }
+        } else {
+            frozenBitmap = null
+        }
+    }
 
     // Bind as soon as the PreviewView exists. readyToBind stays true for the
     // whole open+close slide so the live TextureView rides translationY —
@@ -383,11 +410,19 @@ fun CameraCaptureScreen(
                 .padding(top = 8.dp)
                 .clip(RoundedCornerShape(14.dp)),
         ) {
-            // Live TextureView (COMPATIBLE) — follows the sheet's translationY
-            // during open AND close, so the picture never snaps to black.
-            // readyToBind stays true for the whole visible lifetime; surface
-            // is only released after the sheet is off-screen.
-            if (hasCamera && readyToBind) {
+            // Display priority:
+            //  1. Frozen last frame (close in progress) — static, zero HAL cost
+            //  2. Live TextureView while readyToBind — rides open slide, fades
+            //     in on StreamState.STREAMING
+            val frozen = frozenBitmap
+            if (frozen != null) {
+                Image(
+                    bitmap = frozen,
+                    contentDescription = null,
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier.fillMaxSize(),
+                )
+            } else if (hasCamera && readyToBind) {
                 AndroidView(
                     factory = { ctx ->
                         PreviewView(ctx).apply {
@@ -397,8 +432,7 @@ fun CameraCaptureScreen(
                             )
                             scaleType = PreviewView.ScaleType.FILL_CENTER
                             // TextureView: correctly transformed by parent
-                            // graphicsLayer. SurfaceView (PERFORMANCE) would
-                            // lag behind / punch holes during the slide.
+                            // graphicsLayer during the open slide.
                             implementationMode = PreviewView.ImplementationMode.COMPATIBLE
                         }.also { previewView = it }
                     },

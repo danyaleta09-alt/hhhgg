@@ -73,6 +73,7 @@ import com.letify.app.ui.state.TransitionStyle
 import com.letify.app.ui.theme.Letify
 import dev.chrisbanes.haze.HazeState
 import dev.chrisbanes.haze.haze
+import androidx.compose.runtime.withFrameNanos
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 
@@ -167,30 +168,30 @@ fun LetifyApp() {
     var overlayStack by remember { mutableStateOf<List<AddOverlay>>(emptyList()) }
     var lastAction by remember { mutableStateOf("init") }
 
-    // Camera opens as a simple full-screen slide-up from the bottom.
-    // Progress 0 = off-screen below, 1 = settled.
+    // Camera sheet — Instagram/Telegram-grade open & close.
     //
-    // Live-preview contract (Telegram-style — picture stays during motion):
-    //  1. ONE cancellable Job owns the slide (mid-open close cancels cleanly).
-    //  2. `cameraReady` is true for the WHOLE visible lifetime — including the
-    //     slide-out. PreviewView uses TextureView (COMPATIBLE), which correctly
-    //     follows parent translationY, so the live feed rides the sheet instead
-    //     of being torn down → black flash → then animating.
-    //  3. Surface is released only AFTER the sheet is off-screen (cameraVisible
-    //     flips false → composition disposed → unbind). User never sees the drop.
-    //  4. ProcessCameraProvider is prewarmed at app start so bind is cheap.
+    // OPEN:  TextureView binds in parallel with the slide; first real frame
+    //        fades in via StreamState.STREAMING (no black→pop).
+    // CLOSE: 1) freeze last frame to a bitmap  2) drop the live HAL
+    //        3) slide the *static* image away. Zero camera work during the
+    //        animation → zero jank, picture never "vanishes".
+    // Motion reads of cameraProgress happen ONLY inside graphicsLayer
+    // (draw phase) so CameraCaptureScreen is never recomposed per frame.
     val cameraScope = rememberCoroutineScope()
     val appContext = LocalContext.current
     var cameraVisible by remember { mutableStateOf(false) }
     val cameraProgress = remember { Animatable(0f) }
     var cameraReady by remember { mutableStateOf(false) }
+    // Signals CameraCaptureScreen to snapshot PreviewView.bitmap before we
+    // tear the surface down.
+    var cameraFreeze by remember { mutableStateOf(false) }
     var cameraAnimJob by remember { mutableStateOf<Job?>(null) }
     LaunchedEffect(Unit) { CameraPrewarm.warm(appContext) }
     val openCamera: () -> Unit = {
         CameraPrewarm.warm(appContext)
         cameraAnimJob?.cancel()
+        cameraFreeze = false
         cameraVisible = true
-        // Allow bind immediately — TextureView rides the slide-up with the feed.
         cameraReady = true
         cameraAnimJob = cameraScope.launch {
             cameraProgress.animateTo(
@@ -201,15 +202,23 @@ fun LetifyApp() {
     }
     val closeCamera: () -> Unit = {
         cameraAnimJob?.cancel()
-        // Keep cameraReady=true so the last live frame stays on screen while
-        // the sheet slides down. Release only after it's gone.
         cameraAnimJob = cameraScope.launch {
+            // 1. Ask for a freeze-frame while the live surface is still up.
+            cameraFreeze = true
+            // 2. Two frames: LaunchedEffect captures bitmap + composition
+            //    swaps live TextureView → static Image.
+            withFrameNanos { }
+            withFrameNanos { }
+            // 3. Release the camera HAL — the frozen image stays on screen.
+            cameraReady = false
+            // 4. Slide the sheet (with the frozen picture) off-screen.
             cameraProgress.animateTo(
                 0f,
                 animationSpec = tween(CameraSlideOutMs, easing = CameraSlideEasing),
             )
-            cameraReady = false
+            // 5. Tear down composition only once it's fully gone.
             cameraVisible = false
+            cameraFreeze = false
         }
     }
     val overlay: AddOverlay? = overlayStack.lastOrNull()
@@ -511,6 +520,7 @@ fun LetifyApp() {
                         onBack = closeCamera,
                         onCaptured = {},
                         readyToBind = cameraReady,
+                        freezeFrame = cameraFreeze,
                     )
                 }
             }
