@@ -176,7 +176,6 @@ fun CameraCaptureScreen(
     var useUltraWide by remember { mutableStateOf(false) }
     var ultraWideAvailable by remember { mutableStateOf(false) }
     // Tools island: flash / timer / zoom / exposure / dual
-    var toolsOpen by remember { mutableStateOf(false) }
     var showExposure by remember { mutableStateOf(false) }
     var flashMode by remember { mutableIntStateOf(ImageCapture.FLASH_MODE_OFF) }
     var timerSec by remember { mutableIntStateOf(0) } // 0, 3, 10
@@ -723,69 +722,7 @@ fun CameraCaptureScreen(
                 }
             }
 
-            // Tools button — top-right; opens the island menu.
-            NoFeedbackButton(
-                onClick = { toolsOpen = !toolsOpen },
-                modifier = Modifier
-                    .align(Alignment.TopEnd)
-                    .padding(end = 12.dp, top = 10.dp)
-                    .size(40.dp),
-            ) {
-                Box(
-                    Modifier
-                        .fillMaxSize()
-                        .background(
-                            if (toolsOpen) Color.White.copy(alpha = 0.28f)
-                            else Color.Black.copy(alpha = 0.4f),
-                            CircleShape,
-                        ),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    SolarIcon(name = "menu-dots-bold", tint = Color.White, size = 20.dp)
-                }
-            }
-
-            // Tools island — animated scale+fade from the dots button.
-            FadeScaleVisibility(
-                visible = toolsOpen,
-                enter = fadeIn(tween(180)) + scaleIn(
-                    initialScale = 0.86f,
-                    animationSpec = tween(200),
-                    transformOrigin = TransformOrigin(1f, 0f),
-                ),
-                exit = fadeOut(tween(120)) + scaleOut(
-                    targetScale = 0.86f,
-                    animationSpec = tween(140),
-                    transformOrigin = TransformOrigin(1f, 0f),
-                ),
-                modifier = Modifier
-                    .align(Alignment.TopEnd)
-                    .padding(top = 56.dp, end = 12.dp),
-            ) {
-                CameraToolsIsland(
-                    flashMode = flashMode,
-                    timerSec = timerSec,
-                    ultraWideAvailable = ultraWideAvailable,
-                    useUltraWide = useUltraWide,
-                    zoomRatio = zoomRatio,
-                    showExposure = showExposure,
-                    exposureSupported = exposureMax > exposureMin,
-                    dualMode = dualMode,
-                    dualSupported = dualSupported,
-                    onFlash = { cycleFlash() },
-                    onTimer = { cycleTimer() },
-                    onZoomUltra = { setZoom(0.6f) },
-                    onZoom1x = { setZoom(1f) },
-                    onExposureToggle = {
-                        showExposure = !showExposure
-                        if (showExposure) toolsOpen = false // free the right edge for the rail
-                        if (!showExposure) setExposure(0)
-                    },
-                    onDual = { toggleDual() },
-                )
-            }
-
-            // Exposure rail on the LEFT so it never overlaps the island.
+            // Exposure rail — left side of the frame.
             if (showExposure && boundCamera != null && exposureMax > exposureMin) {
                 ExposureRail(
                     index = exposureIndex,
@@ -798,14 +735,12 @@ fun CameraCaptureScreen(
                 )
             }
 
-            // Dual-camera PIP — draggable circle with the secondary feed.
+            // Dual-camera PIP — draggable circle.
             if (dualMode && dualSupported) {
                 val pipSize = 112.dp
                 Box(
                     Modifier
-                        .offset {
-                            IntOffset(pipOffset.x.toInt(), pipOffset.y.toInt())
-                        }
+                        .offset { IntOffset(pipOffset.x.toInt(), pipOffset.y.toInt()) }
                         .size(pipSize)
                         .clip(CircleShape)
                         .background(Color.Black, CircleShape)
@@ -832,7 +767,6 @@ fun CameraCaptureScreen(
                         },
                         modifier = Modifier.fillMaxSize(),
                     )
-                    // Thin white ring
                     Box(
                         Modifier
                             .fillMaxSize()
@@ -858,195 +792,215 @@ fun CameraCaptureScreen(
                     )
                 }
             }
-        }
 
-        // Control bar — lives in the black area below the preview, not on
-        // top of the live feed.
-        Box(
-            Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 28.dp)
-                .padding(top = 18.dp, bottom = 16.dp),
-        ) {
-            // Left: thumbnail OR lock target while recording (Telegram-style).
-            if (isRecording && !recordingLocked) {
-                val lockScale = if (lockArmed) 1.15f else 1f
-                NoFeedbackButton(
-                    onClick = {
-                        recordingLocked = true
-                        lockArmed = false
+            // ── Capture controls INSIDE the bottom of the preview frame ──
+            Box(
+                Modifier
+                    .align(Alignment.BottomCenter)
+                    .fillMaxWidth()
+                    .padding(horizontal = 22.dp, vertical = 16.dp),
+            ) {
+                // Left: lock while recording, else thumbnail
+                if (isRecording && !recordingLocked) {
+                    val lockScale = if (lockArmed) 1.15f else 1f
+                    NoFeedbackButton(
+                        onClick = {
+                            recordingLocked = true
+                            lockArmed = false
+                        },
+                        modifier = Modifier
+                            .align(Alignment.CenterStart)
+                            .size(52.dp)
+                            .graphicsLayer { scaleX = lockScale; scaleY = lockScale },
+                    ) {
+                        Box(
+                            Modifier
+                                .fillMaxSize()
+                                .background(
+                                    if (lockArmed) Color.Black.copy(alpha = 0.45f)
+                                    else Color.Black.copy(alpha = 0.35f),
+                                    CircleShape,
+                                )
+                                .border(
+                                    width = if (lockArmed) 2.dp else 1.dp,
+                                    color = if (lockArmed) Color.White else Color.White.copy(alpha = 0.4f),
+                                    shape = CircleShape,
+                                ),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Text("🔒", fontSize = 20.sp)
+                        }
+                    }
+                } else if (!isRecording) {
+                    Box(
+                        Modifier
+                            .align(Alignment.CenterStart)
+                            .size(48.dp)
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(Color.Black.copy(alpha = 0.35f)),
+                    ) {
+                        val thumb = lastThumb
+                        if (thumb != null) {
+                            AsyncImage(
+                                model = ImageRequest.Builder(context)
+                                    .data(thumb)
+                                    .crossfade(true)
+                                    .build(),
+                                contentDescription = null,
+                                contentScale = ContentScale.Crop,
+                                modifier = Modifier.fillMaxSize(),
+                            )
+                        }
+                        if (sessionCaptureCount > 0) {
+                            Box(
+                                Modifier
+                                    .align(Alignment.TopEnd)
+                                    .offset(x = 6.dp, y = (-6).dp)
+                                    .size(18.dp)
+                                    .background(Color.White, CircleShape),
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                Text(
+                                    sessionCaptureCount.toString(),
+                                    color = Color.Black,
+                                    fontSize = 10.sp,
+                                    fontWeight = FontWeight.Bold,
+                                )
+                            }
+                        }
+                    }
+                }
+
+                // Shutter
+                val shutterColor by animateColorAsState(
+                    targetValue = when {
+                        isRecording -> Color(0xFFE53935)
+                        else -> Color.White
                     },
-                    modifier = Modifier
-                        .align(Alignment.CenterStart)
-                        .size(52.dp)
-                        .graphicsLayer { scaleX = lockScale; scaleY = lockScale },
+                    label = "shutter",
+                )
+                val innerShape = if (isRecording && recordingLocked) RoundedCornerShape(8.dp)
+                else if (isRecording) RoundedCornerShape(10.dp)
+                else CircleShape
+                val innerSize = if (isRecording) 28.dp else 58.dp
+
+                Box(
+                    Modifier
+                        .align(Alignment.Center)
+                        .size(74.dp)
+                        .border(3.dp, Color.White, CircleShape)
+                        .pointerInput(isRecording, recordingLocked) {
+                            detectTapGestures(
+                                onTap = {
+                                    when {
+                                        isRecording && recordingLocked -> stopVideo()
+                                        !isRecording -> takePhoto()
+                                    }
+                                },
+                                onLongPress = {
+                                    if (!isRecording) startVideo()
+                                },
+                                onPress = {
+                                    if (isRecording && recordingLocked) return@detectTapGestures
+                                    tryAwaitRelease()
+                                    if (isRecording && !recordingLocked) {
+                                        if (lockArmed) {
+                                            recordingLocked = true
+                                            lockArmed = false
+                                        } else {
+                                            stopVideo()
+                                        }
+                                    }
+                                },
+                            )
+                        }
+                        .pointerInput(isRecording, recordingLocked) {
+                            if (!isRecording || recordingLocked) return@pointerInput
+                            detectDragGestures(
+                                onDragEnd = {
+                                    if (lockArmed) {
+                                        recordingLocked = true
+                                        lockArmed = false
+                                    }
+                                },
+                                onDrag = { change, _ ->
+                                    change.consume()
+                                    lockArmed = change.position.x < -36f
+                                },
+                            )
+                        },
+                    contentAlignment = Alignment.Center,
                 ) {
                     Box(
                         Modifier
-                            .fillMaxSize()
-                            .background(
-                                if (lockArmed) Color.White.copy(alpha = 0.28f)
-                                else Color.White.copy(alpha = 0.12f),
-                                CircleShape,
-                            )
-                            .border(
-                                width = if (lockArmed) 2.dp else 1.dp,
-                                color = if (lockArmed) Color.White else Color.White.copy(alpha = 0.35f),
-                                shape = CircleShape,
-                            ),
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        Text("🔒", fontSize = 20.sp)
-                    }
+                            .size(innerSize)
+                            .background(shutterColor, innerShape),
+                    )
                 }
-            } else if (!isRecording) {
-                // Last shot thumbnail (bottom-left)
-                Box(
-                    Modifier
-                        .align(Alignment.CenterStart)
-                        .size(48.dp)
-                        .clip(RoundedCornerShape(12.dp))
-                        .background(Color.White.copy(alpha = 0.1f)),
-                ) {
-                    val thumb = lastThumb
-                    if (thumb != null) {
-                        AsyncImage(
-                            model = ImageRequest.Builder(context)
-                                .data(thumb)
-                                .crossfade(true)
-                                .build(),
-                            contentDescription = null,
-                            contentScale = ContentScale.Crop,
-                            modifier = Modifier.fillMaxSize(),
-                        )
-                    }
-                    if (sessionCaptureCount > 0) {
+
+                // Flip — right
+                if (!isRecording) {
+                    NoFeedbackButton(
+                        onClick = { flipCamera() },
+                        modifier = Modifier
+                            .align(Alignment.CenterEnd)
+                            .size(48.dp),
+                    ) {
                         Box(
                             Modifier
-                                .align(Alignment.TopEnd)
-                                .offset(x = 6.dp, y = (-6).dp)
-                                .size(18.dp)
-                                .background(Color.White, CircleShape),
+                                .fillMaxSize()
+                                .background(Color.Black.copy(alpha = 0.35f), CircleShape),
                             contentAlignment = Alignment.Center,
                         ) {
-                            Text(
-                                sessionCaptureCount.toString(),
-                                color = Color.Black,
-                                fontSize = 10.sp,
-                                fontWeight = FontWeight.Bold,
-                            )
+                            SolarIcon(name = "restart-bold", tint = Color.White, size = 22.dp)
                         }
                     }
                 }
             }
-
-            // Shutter — center. Long-press records; drag left toward lock to arm.
-            val shutterColor by animateColorAsState(
-                targetValue = when {
-                    isRecording && recordingLocked -> Color(0xFFE53935)
-                    isRecording -> Color(0xFFE53935)
-                    else -> Color.White
-                },
-                label = "shutter",
-            )
-            val innerShape = if (isRecording && recordingLocked) RoundedCornerShape(8.dp)
-            else if (isRecording) RoundedCornerShape(10.dp)
-            else CircleShape
-            val innerSize = if (isRecording) 28.dp else 58.dp
-
-            Box(
-                Modifier
-                    .align(Alignment.Center)
-                    .size(74.dp)
-                    .border(3.dp, Color.White, CircleShape)
-                    .pointerInput(isRecording, recordingLocked) {
-                        // Track absolute position to detect slide-to-lock.
-                        detectTapGestures(
-                            onTap = {
-                                when {
-                                    isRecording && recordingLocked -> stopVideo()
-                                    !isRecording -> takePhoto()
-                                }
-                            },
-                            onLongPress = {
-                                if (!isRecording) startVideo()
-                            },
-                            onPress = {
-                                if (isRecording && recordingLocked) return@detectTapGestures
-                                val released = tryAwaitRelease()
-                                if (isRecording && !recordingLocked) {
-                                    if (lockArmed) {
-                                        recordingLocked = true
-                                        lockArmed = false
-                                    } else {
-                                        stopVideo()
-                                    }
-                                }
-                            },
-                        )
-                    }
-                    .pointerInput(isRecording, recordingLocked) {
-                        if (!isRecording || recordingLocked) return@pointerInput
-                        detectDragGestures(
-                            onDragEnd = {
-                                if (lockArmed) {
-                                    recordingLocked = true
-                                    lockArmed = false
-                                }
-                            },
-                            onDrag = { change, _ ->
-                                change.consume()
-                                // Finger moved left toward the lock zone (left half of bar).
-                                val x = change.position.x
-                                // Local to shutter: negative X = toward left / lock.
-                                lockArmed = change.position.x < -20f ||
-                                    change.previousPosition.x < -40f
-                                // Use absolute root position via history
-                                val totalX = change.position.x
-                                // Approximate: if user drags left more than 40px, arm lock
-                                lockArmed = totalX < -36f
-                            },
-                        )
-                    },
-                contentAlignment = Alignment.Center,
-            ) {
-                Box(
-                    Modifier
-                        .size(innerSize)
-                        .background(shutterColor, innerShape),
-                )
-            }
-
-            // Flip camera — bottom-right (hidden while recording)
-            if (!isRecording) {
-                NoFeedbackButton(
-                    onClick = { flipCamera() },
-                    modifier = Modifier
-                        .align(Alignment.CenterEnd)
-                        .size(48.dp),
-                ) {
-                    Box(
-                        Modifier
-                            .fillMaxSize()
-                            .background(Color.White.copy(alpha = 0.15f), CircleShape),
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        SolarIcon(name = "restart-bold", tint = Color.White, size = 22.dp)
-                    }
-                }
-            }
         }
 
-        // Hint
+        // Tools menu lives in the freed bottom strip (no ⋯ button).
+        CameraToolsIsland(
+            flashMode = flashMode,
+            timerSec = timerSec,
+            ultraWideAvailable = ultraWideAvailable,
+            useUltraWide = useUltraWide,
+            zoomRatio = zoomRatio,
+            showExposure = showExposure,
+            exposureSupported = exposureMax > exposureMin,
+            dualMode = dualMode,
+            dualSupported = dualSupported,
+            onFlash = { cycleFlash() },
+            onTimer = { cycleTimer() },
+            onZoomUltra = { setZoom(0.6f) },
+            onZoom1x = { setZoom(1f) },
+            onExposureToggle = {
+                showExposure = !showExposure
+                if (!showExposure) setExposure(0)
+            },
+            onDual = { toggleDual() },
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp)
+                .padding(top = 12.dp, bottom = 6.dp),
+        )
+
         Text(
-            if (isRecording) "Отпусти, чтобы остановить"
-            else "Тап — фото · Удерживай — видео",
+            if (isRecording) {
+                if (recordingLocked) "Тап по кнопке — стоп"
+                else "Отпусти или замок — продолжить"
+            } else {
+                "Тап — фото · Удерживай — видео"
+            },
             color = Color.White.copy(alpha = 0.45f),
             fontSize = 11.sp,
             modifier = Modifier
                 .align(Alignment.CenterHorizontally)
                 .padding(bottom = 10.dp),
         )
+    }
+}
+
     }
 }
 
@@ -1085,9 +1039,8 @@ private fun CameraToolsIsland(
 
     Column(
         modifier = modifier
-            .width(196.dp)
-            .background(Color.Black.copy(alpha = 0.78f), RoundedCornerShape(22.dp))
-            .padding(vertical = 8.dp),
+            .background(Color(0xFF1A1A1A), RoundedCornerShape(20.dp))
+            .padding(vertical = 4.dp),
     ) {
         ToolsRow(
             icon = "fire-outline",
