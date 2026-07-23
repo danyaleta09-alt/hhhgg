@@ -14,11 +14,7 @@ import androidx.camera.core.ImageCaptureException
 import androidx.camera.core.Preview
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.video.FileOutputOptions
-import androidx.camera.video.Quality
-import androidx.camera.video.QualitySelector
-import androidx.camera.video.Recorder
 import androidx.camera.video.Recording
-import androidx.camera.video.VideoCapture
 import androidx.camera.video.VideoRecordEvent
 import androidx.camera.view.PreviewView
 import androidx.compose.animation.AnimatedVisibility
@@ -85,7 +81,6 @@ import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
-import java.util.concurrent.Executors
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
@@ -98,6 +93,14 @@ private const val LENS_FADE_MIN_ALPHA = 0.35f
 fun CameraCaptureScreen(
     onBack: () -> Unit,
     onCaptured: () -> Unit = {},
+    // True once the slide-up animation has settled. The provider is
+    // prewarmed way earlier (see CameraPrewarm), but the actual
+    // bindToLifecycle() call is real, synchronous, main-thread work —
+    // doing it while the slide is still animating is what causes the
+    // frame drops. Gating it on the caller's real animation-completion
+    // signal (instead of a guessed delay) keeps the two from ever
+    // competing for the same frames.
+    readyToBind: Boolean = true,
 ) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
@@ -162,28 +165,19 @@ fun CameraCaptureScreen(
         }
     }
 
-    val imageCapture = remember {
-        ImageCapture.Builder()
-            .setCaptureMode(ImageCapture.CAPTURE_MODE_MINIMIZE_LATENCY)
-            .build()
-    }
-    val recorder = remember {
-        Recorder.Builder()
-            .setQualitySelector(QualitySelector.from(Quality.SD))
-            .build()
-    }
-    val videoCapture = remember { VideoCapture.withOutput(recorder) }
+    val imageCapture = CameraPrewarm.imageCapture
+    val videoCapture = CameraPrewarm.videoCapture
     var activeRecording by remember { mutableStateOf<Recording?>(null) }
     var boundCamera by remember { mutableStateOf<Camera?>(null) }
 
-    val cameraExecutor = remember { Executors.newSingleThreadExecutor() }
+    val cameraExecutor = CameraPrewarm.executor
     var previewView by remember { mutableStateOf<PreviewView?>(null) }
     var bindGeneration by remember { mutableIntStateOf(0) }
 
-    // Bind as soon as the PreviewView surface exists.
-    DisposableEffect(lensFacing, previewView, lifecycleOwner, bindGeneration, hasCamera) {
+    // Bind once the slide has settled AND the PreviewView surface exists.
+    DisposableEffect(readyToBind, lensFacing, previewView, lifecycleOwner, bindGeneration, hasCamera) {
         val view = previewView
-        if (view == null || !hasCamera) {
+        if (!readyToBind || view == null || !hasCamera) {
             onDispose { }
         } else {
             val mainExecutor = ContextCompat.getMainExecutor(context)
@@ -246,7 +240,6 @@ fun CameraCaptureScreen(
     DisposableEffect(Unit) {
         onDispose {
             activeRecording?.stop()
-            cameraExecutor.shutdown()
         }
     }
 

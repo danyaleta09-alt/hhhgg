@@ -174,6 +174,11 @@ fun LetifyApp() {
     val appContext = LocalContext.current
     var cameraVisible by remember { mutableStateOf(false) }
     val cameraProgress = remember { Animatable(0f) }
+    // Flips true only once the slide-up animation has fully settled.
+    // CameraCaptureScreen uses this to defer the actual (expensive,
+    // synchronous) CameraX bind until the animation is done, so the two
+    // never fight over the same frames.
+    var cameraReady by remember { mutableStateOf(false) }
     // Kick off ProcessCameraProvider.getInstance() as soon as the app is up
     // (not when the user taps the camera button) so the HAL is already warm
     // by the time it's actually needed — this is what removes the stutter
@@ -181,12 +186,14 @@ fun LetifyApp() {
     LaunchedEffect(Unit) { CameraPrewarm.warm(appContext) }
     val openCamera: () -> Unit = {
         CameraPrewarm.warm(appContext)
+        cameraReady = false
         cameraVisible = true
         cameraScope.launch {
             cameraProgress.animateTo(
                 1f,
                 animationSpec = tween(CameraSlideInMs, easing = CameraSlideEasing),
             )
+            cameraReady = true
         }
     }
     val closeCamera: () -> Unit = {
@@ -196,6 +203,7 @@ fun LetifyApp() {
                 animationSpec = tween(CameraSlideOutMs, easing = CameraSlideEasing),
             )
             cameraVisible = false
+            cameraReady = false
         }
     }
     val overlay: AddOverlay? = overlayStack.lastOrNull()
@@ -493,6 +501,7 @@ fun LetifyApp() {
                         onBack = closeCamera,
                         // Stay on camera; a corner thumbnail confirms the shot.
                         onCaptured = {},
+                        readyToBind = cameraReady,
                     )
                 }
             }

@@ -1,8 +1,15 @@
 package com.letify.app.ui.screens
 
 import android.content.Context
+import androidx.camera.core.ImageCapture
 import androidx.camera.lifecycle.ProcessCameraProvider
+import androidx.camera.video.Quality
+import androidx.camera.video.QualitySelector
+import androidx.camera.video.Recorder
+import androidx.camera.video.VideoCapture
 import com.google.common.util.concurrent.ListenableFuture
+import java.util.concurrent.ExecutorService
+import java.util.concurrent.Executors
 
 /**
  * `ProcessCameraProvider.getInstance()` is what actually costs time when the
@@ -15,6 +22,13 @@ import com.google.common.util.concurrent.ListenableFuture
  * before the slide-up begins) so that by the time [CameraCaptureScreen] asks
  * for it, the provider is already resolved (or resolving in the background)
  * instead of starting cold.
+ *
+ * It also holds the [ImageCapture] / [Recorder] / [VideoCapture] use-cases
+ * and the capture [ExecutorService]. These used to live in `remember {}`
+ * inside CameraCaptureScreen, which meant every open rebuilt them from
+ * scratch (the screen is fully unmounted on close) — extra main-thread work
+ * landing on exactly the same frames as the slide-up. Building them once for
+ * the whole process and reusing them on every open removes that cost too.
  */
 object CameraPrewarm {
     @Volatile
@@ -28,10 +42,32 @@ object CameraPrewarm {
                 }
             }
         }
+        // Touch the lazies so the use-cases/executor are built now, off the
+        // camera-screen's first composition.
+        imageCapture
+        videoCapture
+        executor
     }
 
     fun future(context: Context): ListenableFuture<ProcessCameraProvider> {
         warm(context)
         return cached!!
     }
+
+    val imageCapture: ImageCapture by lazy {
+        ImageCapture.Builder()
+            .setCaptureMode(ImageCapture.CAPTURE_MODE_MINIMIZE_LATENCY)
+            .build()
+    }
+
+    val recorder: Recorder by lazy {
+        Recorder.Builder()
+            .setQualitySelector(QualitySelector.from(Quality.SD))
+            .build()
+    }
+
+    val videoCapture: VideoCapture<Recorder> by lazy { VideoCapture.withOutput(recorder) }
+
+    /** One long-lived background thread for capture callbacks — never shut down. */
+    val executor: ExecutorService by lazy { Executors.newSingleThreadExecutor() }
 }
