@@ -12,8 +12,8 @@ android {
         applicationId = "com.letify.app"
         minSdk = 26
         targetSdk = 34
-        versionCode = 190
-        versionName = "r190-wrapcontentsize-import"
+        versionCode = 191
+        versionName = "r191-dual-stable-exposure"
         vectorDrawables { useSupportLibrary = true }
     }
 

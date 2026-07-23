@@ -50,6 +50,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.requiredSize
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.windowInsetsPadding
@@ -264,10 +265,10 @@ fun CameraCaptureScreen(
                             (focals?.minOrNull() ?: 99f) < 2.5f
                         }.getOrDefault(false)
                     }
-                    val concurrentFeature = context.packageManager
-                        .hasSystemFeature(android.content.pm.PackageManager.FEATURE_CAMERA_CONCURRENT)
-                    val concurrentCombos = p.availableConcurrentCameraInfos
-                    dualSupported = concurrentFeature || concurrentCombos.any { combo ->
+                    // Only trust real concurrent camera pairs. The system feature
+                    // flag alone is a false positive on many OEMs and led to
+                    // bind → fail → dualMode=false flicker loops.
+                    dualSupported = p.availableConcurrentCameraInfos.any { combo ->
                         combo.any { it.lensFacing == CameraSelector.LENS_FACING_BACK } &&
                             combo.any { it.lensFacing == CameraSelector.LENS_FACING_FRONT }
                     }
@@ -303,7 +304,7 @@ fun CameraCaptureScreen(
                     if (cancelled) return@addListener
 
                     val secView = secondaryPreviewView
-                    val canDual = dualMode && secView != null
+                    val canDual = dualMode && dualSupported && secView != null
                     val cam: Camera? = if (canDual) {
                         val secondaryFacing =
                             if (lensFacing == CameraSelector.LENS_FACING_BACK)
@@ -369,6 +370,7 @@ fun CameraCaptureScreen(
                         } catch (e: Exception) {
                             Log.w(TAG, "concurrent bind failed, falling back", e)
                             dualMode = false
+                            dualSupported = false
                             p.bindToLifecycle(lifecycleOwner, selector, preview, imageCapture, videoCapture)
                         }
                     } else {
@@ -604,14 +606,8 @@ fun CameraCaptureScreen(
     }
 
     fun toggleDual() {
-        // Always flip — if the device lacks concurrent cameras the bind path
-        // falls back and dualMode is cleared there. Letting the user try means
-        // dualSupported false-negatives don't brick the button.
+        if (!dualSupported) return // no concurrent pair on this device
         dualMode = !dualMode
-        if (dualMode) {
-            // Ensure PIP PreviewView is composed before the next bind.
-            // secondaryPreviewView is assigned from AndroidView factory.
-        }
         bindGeneration++
     }
 
@@ -759,21 +755,24 @@ fun CameraCaptureScreen(
                 }
             }
 
-            // Dual-camera PIP — draggable circle.
-            if (dualMode) {
-                val pipSize = 112.dp
+            // Dual-camera PIP — small fixed circle, only when concurrent is real.
+            if (dualMode && dualSupported) {
+                val pipSize = 104.dp
                 Box(
                     Modifier
+                        .align(Alignment.TopEnd)
+                        .padding(top = 56.dp, end = 12.dp)
                         .offset { IntOffset(pipOffset.x.toInt(), pipOffset.y.toInt()) }
-                        .size(pipSize)
+                        .requiredSize(pipSize)
                         .clip(CircleShape)
                         .background(Color.Black, CircleShape)
+                        .border(2.dp, Color.White.copy(alpha = 0.9f), CircleShape)
                         .pointerInput(Unit) {
                             detectDragGestures { change, drag ->
                                 change.consume()
                                 pipOffset = Offset(
-                                    (pipOffset.x + drag.x).coerceAtLeast(0f),
-                                    (pipOffset.y + drag.y).coerceAtLeast(0f),
+                                    pipOffset.x + drag.x,
+                                    pipOffset.y + drag.y,
                                 )
                             }
                         },
@@ -789,12 +788,9 @@ fun CameraCaptureScreen(
                                 implementationMode = PreviewView.ImplementationMode.COMPATIBLE
                             }.also { secondaryPreviewView = it }
                         },
-                        modifier = Modifier.fillMaxSize(),
-                    )
-                    Box(
-                        Modifier
+                        modifier = Modifier
                             .fillMaxSize()
-                            .border(2.dp, Color.White.copy(alpha = 0.85f), CircleShape),
+                            .clip(CircleShape),
                     )
                 }
             }
@@ -1131,9 +1127,9 @@ private fun CameraToolsBar(
                     accent = accent,
                     onChange = onExposureChange,
                     modifier = Modifier
-                        .align(Alignment.TopCenter)
-                        .offset(y = (-6).dp)
-                        .wrapContentSize(align = Alignment.BottomCenter),
+                        .align(Alignment.BottomCenter)
+                        // Float above the 44dp icon; does not affect row layout.
+                        .offset(y = (-52).dp),
                 )
             }
         }
