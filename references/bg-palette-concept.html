@@ -1,0 +1,461 @@
+<!doctype html><html lang="ru"><head><meta charset="utf-8">
+<style>
+:root{font-family:'Figtree','Inter',system-ui,sans-serif}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:#000;color:#F4F4F5;padding:48px 44px 60px}
+.head{margin-bottom:34px}
+.head h1{font-size:34px;font-weight:800;letter-spacing:-.5px}
+.head p{color:#8A8A92;font-size:16px;margin-top:8px;max-width:760px;line-height:1.5}
+.legend{display:flex;gap:18px;margin-top:16px;font-size:13px;color:#8A8A92}
+.legend b{color:#F4F4F5;font-weight:600}
+.row{margin-bottom:30px}
+.rowhead{display:flex;align-items:center;gap:12px;margin-bottom:14px}
+.acc{width:14px;height:14px;border-radius:5px}
+.names{display:flex;align-items:baseline;gap:12px}
+.names h2{font-size:21px;font-weight:700}
+.cur{color:#6c6c74;font-size:13px}
+.swrow{display:grid;grid-template-columns:repeat(3,1fr);gap:18px}
+.sw{}
+.card{position:relative;height:188px;border-radius:22px;overflow:hidden}
+.wash{position:absolute;inset:0;background:linear-gradient(180deg,
+   color-mix(in srgb, var(--c) 86%, white) 0%,
+   var(--c) 46%,
+   color-mix(in srgb, var(--c) 82%, black) 100%)}
+.cinner{position:relative;height:100%;display:flex;flex-direction:column;
+   align-items:center;justify-content:center;text-align:center}
+.phase{color:#fff;opacity:.92;font-size:12px;font-weight:700;letter-spacing:3px;margin-bottom:6px}
+.big{color:#fff;font-size:48px;font-weight:800;letter-spacing:-1px;line-height:1}
+.hint{color:#fff;opacity:.85;font-size:13px;margin-top:8px}
+.meta{display:flex;align-items:center;gap:10px;margin-top:10px;padding:0 4px}
+.lbl{font-size:13px;font-weight:600;color:#cfcfd6}
+.hex{font-size:12px;color:#7a7a82;font-family:ui-monospace,monospace;margin-left:auto}
+.cr{font-size:12px;font-weight:700}
+</style></head><body>
+<div class="head">
+  <h1>Концепт фоновых цветов · бельій текст</h1>
+  <p>Для каждой Активити — 3 варианта фона (комфортные, достаточно насыщенные,
+  чтобы <b style="color:#fff">белый текст</b> читался). Текущие цвета слишком светлые → белый плывёт.
+  Выбери по одному варианту (A / B / C) на каждую активность, можно микс.</p>
+  <div class="legend">
+    <span><b>A</b> светлее (предел)</span><span><b>B</b> баланс · рекоменд.</span><span><b>C</b> глубже</span>
+    <span>· контраст с белым по WCAG: <b style="color:#43d17a">AA ≥4.5</b> хорошо, <b style="color:#f0b13a">AA крупн. ≥3</b> ок</span>
+  </div>
+</div>
+
+    <section class="row">
+      <div class="rowhead">
+        <div class="acc" style="background:#45C8E8"></div>
+        <div class="names"><h2>Душ</h2><span class="cur">текущий #45C8E8 · оставляем неон, для сравнения</span></div>
+      </div>
+      <div class="swrow">
+    <div class="sw">
+      <div class="card" style="--c:#2C93B6">
+        <div class="wash"></div>
+        <div class="cinner">
+          <div class="phase">ФАЗА</div>
+          <div class="big">12:00</div>
+          <div class="hint">бельій текст на фоне</div>
+        </div>
+      </div>
+      <div class="meta">
+        <span class="lbl">A · светлее</span>
+        <span class="hex">#2C93B6</span>
+        <span class="cr" style="color:#f0b13a">3.53:1 · AA крупн.</span>
+      </div>
+    </div>
+    <div class="sw">
+      <div class="card" style="--c:#1F7C9E">
+        <div class="wash"></div>
+        <div class="cinner">
+          <div class="phase">ФАЗА</div>
+          <div class="big">12:00</div>
+          <div class="hint">бельій текст на фоне</div>
+        </div>
+      </div>
+      <div class="meta">
+        <span class="lbl">B · баланс</span>
+        <span class="hex">#1F7C9E</span>
+        <span class="cr" style="color:#43d17a">4.74:1 · AA</span>
+      </div>
+    </div>
+    <div class="sw">
+      <div class="card" style="--c:#155F7C">
+        <div class="wash"></div>
+        <div class="cinner">
+          <div class="phase">ФАЗА</div>
+          <div class="big">12:00</div>
+          <div class="hint">бельій текст на фоне</div>
+        </div>
+      </div>
+      <div class="meta">
+        <span class="lbl">C · глубже</span>
+        <span class="hex">#155F7C</span>
+        <span class="cr" style="color:#43d17a">7.1:1 · AAA</span>
+      </div>
+    </div></div>
+    </section>
+    <section class="row">
+      <div class="rowhead">
+        <div class="acc" style="background:#7CD992"></div>
+        <div class="names"><h2>Ходьба</h2><span class="cur">текущий #7CD992</span></div>
+      </div>
+      <div class="swrow">
+    <div class="sw">
+      <div class="card" style="--c:#48A063">
+        <div class="wash"></div>
+        <div class="cinner">
+          <div class="phase">ФАЗА</div>
+          <div class="big">12:00</div>
+          <div class="hint">бельій текст на фоне</div>
+        </div>
+      </div>
+      <div class="meta">
+        <span class="lbl">A · светлее</span>
+        <span class="hex">#48A063</span>
+        <span class="cr" style="color:#f0b13a">3.24:1 · AA крупн.</span>
+      </div>
+    </div>
+    <div class="sw">
+      <div class="card" style="--c:#3C8F5A">
+        <div class="wash"></div>
+        <div class="cinner">
+          <div class="phase">ФАЗА</div>
+          <div class="big">12:00</div>
+          <div class="hint">бельій текст на фоне</div>
+        </div>
+      </div>
+      <div class="meta">
+        <span class="lbl">B · баланс</span>
+        <span class="hex">#3C8F5A</span>
+        <span class="cr" style="color:#f0b13a">3.99:1 · AA крупн.</span>
+      </div>
+    </div>
+    <div class="sw">
+      <div class="card" style="--c:#2E7A4C">
+        <div class="wash"></div>
+        <div class="cinner">
+          <div class="phase">ФАЗА</div>
+          <div class="big">12:00</div>
+          <div class="hint">бельій текст на фоне</div>
+        </div>
+      </div>
+      <div class="meta">
+        <span class="lbl">C · глубже</span>
+        <span class="hex">#2E7A4C</span>
+        <span class="cr" style="color:#43d17a">5.24:1 · AA</span>
+      </div>
+    </div></div>
+    </section>
+    <section class="row">
+      <div class="rowhead">
+        <div class="acc" style="background:#B084F5"></div>
+        <div class="names"><h2>Сон</h2><span class="cur">текущий #B084F5</span></div>
+      </div>
+      <div class="swrow">
+    <div class="sw">
+      <div class="card" style="--c:#7E5AD0">
+        <div class="wash"></div>
+        <div class="cinner">
+          <div class="phase">ФАЗА</div>
+          <div class="big">12:00</div>
+          <div class="hint">бельій текст на фоне</div>
+        </div>
+      </div>
+      <div class="meta">
+        <span class="lbl">A · светлее</span>
+        <span class="hex">#7E5AD0</span>
+        <span class="cr" style="color:#43d17a">4.93:1 · AA</span>
+      </div>
+    </div>
+    <div class="sw">
+      <div class="card" style="--c:#6A47C0">
+        <div class="wash"></div>
+        <div class="cinner">
+          <div class="phase">ФАЗА</div>
+          <div class="big">12:00</div>
+          <div class="hint">бельій текст на фоне</div>
+        </div>
+      </div>
+      <div class="meta">
+        <span class="lbl">B · баланс</span>
+        <span class="hex">#6A47C0</span>
+        <span class="cr" style="color:#43d17a">6.41:1 · AA</span>
+      </div>
+    </div>
+    <div class="sw">
+      <div class="card" style="--c:#573BA6">
+        <div class="wash"></div>
+        <div class="cinner">
+          <div class="phase">ФАЗА</div>
+          <div class="big">12:00</div>
+          <div class="hint">бельій текст на фоне</div>
+        </div>
+      </div>
+      <div class="meta">
+        <span class="lbl">C · глубже</span>
+        <span class="hex">#573BA6</span>
+        <span class="cr" style="color:#43d17a">8.13:1 · AAA</span>
+      </div>
+    </div></div>
+    </section>
+    <section class="row">
+      <div class="rowhead">
+        <div class="acc" style="background:#9AA0FF"></div>
+        <div class="names"><h2>Медитация</h2><span class="cur">текущий #9AA0FF</span></div>
+      </div>
+      <div class="swrow">
+    <div class="sw">
+      <div class="card" style="--c:#6B72D8">
+        <div class="wash"></div>
+        <div class="cinner">
+          <div class="phase">ФАЗА</div>
+          <div class="big">12:00</div>
+          <div class="hint">бельій текст на фоне</div>
+        </div>
+      </div>
+      <div class="meta">
+        <span class="lbl">A · светлее</span>
+        <span class="hex">#6B72D8</span>
+        <span class="cr" style="color:#f0b13a">4.18:1 · AA крупн.</span>
+      </div>
+    </div>
+    <div class="sw">
+      <div class="card" style="--c:#575FC8">
+        <div class="wash"></div>
+        <div class="cinner">
+          <div class="phase">ФАЗА</div>
+          <div class="big">12:00</div>
+          <div class="hint">бельій текст на фоне</div>
+        </div>
+      </div>
+      <div class="meta">
+        <span class="lbl">B · баланс</span>
+        <span class="hex">#575FC8</span>
+        <span class="cr" style="color:#43d17a">5.42:1 · AA</span>
+      </div>
+    </div>
+    <div class="sw">
+      <div class="card" style="--c:#4951B2">
+        <div class="wash"></div>
+        <div class="cinner">
+          <div class="phase">ФАЗА</div>
+          <div class="big">12:00</div>
+          <div class="hint">бельій текст на фоне</div>
+        </div>
+      </div>
+      <div class="meta">
+        <span class="lbl">C · глубже</span>
+        <span class="hex">#4951B2</span>
+        <span class="cr" style="color:#43d17a">6.77:1 · AA</span>
+      </div>
+    </div></div>
+    </section>
+    <section class="row">
+      <div class="rowhead">
+        <div class="acc" style="background:#FF6B6B"></div>
+        <div class="names"><h2>Планка</h2><span class="cur">текущий #FF6B6B</span></div>
+      </div>
+      <div class="swrow">
+    <div class="sw">
+      <div class="card" style="--c:#E05656">
+        <div class="wash"></div>
+        <div class="cinner">
+          <div class="phase">ФАЗА</div>
+          <div class="big">12:00</div>
+          <div class="hint">бельій текст на фоне</div>
+        </div>
+      </div>
+      <div class="meta">
+        <span class="lbl">A · светлее</span>
+        <span class="hex">#E05656</span>
+        <span class="cr" style="color:#f0b13a">3.73:1 · AA крупн.</span>
+      </div>
+    </div>
+    <div class="sw">
+      <div class="card" style="--c:#D04444">
+        <div class="wash"></div>
+        <div class="cinner">
+          <div class="phase">ФАЗА</div>
+          <div class="big">12:00</div>
+          <div class="hint">бельій текст на фоне</div>
+        </div>
+      </div>
+      <div class="meta">
+        <span class="lbl">B · баланс</span>
+        <span class="hex">#D04444</span>
+        <span class="cr" style="color:#43d17a">4.57:1 · AA</span>
+      </div>
+    </div>
+    <div class="sw">
+      <div class="card" style="--c:#BA3636">
+        <div class="wash"></div>
+        <div class="cinner">
+          <div class="phase">ФАЗА</div>
+          <div class="big">12:00</div>
+          <div class="hint">бельій текст на фоне</div>
+        </div>
+      </div>
+      <div class="meta">
+        <span class="lbl">C · глубже</span>
+        <span class="hex">#BA3636</span>
+        <span class="cr" style="color:#43d17a">5.72:1 · AA</span>
+      </div>
+    </div></div>
+    </section>
+    <section class="row">
+      <div class="rowhead">
+        <div class="acc" style="background:#FF7DA8"></div>
+        <div class="names"><h2>Растяжка</h2><span class="cur">текущий #FF7DA8</span></div>
+      </div>
+      <div class="swrow">
+    <div class="sw">
+      <div class="card" style="--c:#DE6791">
+        <div class="wash"></div>
+        <div class="cinner">
+          <div class="phase">ФАЗА</div>
+          <div class="big">12:00</div>
+          <div class="hint">бельій текст на фоне</div>
+        </div>
+      </div>
+      <div class="meta">
+        <span class="lbl">A · светлее</span>
+        <span class="hex">#DE6791</span>
+        <span class="cr" style="color:#f0b13a">3.25:1 · AA крупн.</span>
+      </div>
+    </div>
+    <div class="sw">
+      <div class="card" style="--c:#CE4F7D">
+        <div class="wash"></div>
+        <div class="cinner">
+          <div class="phase">ФАЗА</div>
+          <div class="big">12:00</div>
+          <div class="hint">бельій текст на фоне</div>
+        </div>
+      </div>
+      <div class="meta">
+        <span class="lbl">B · баланс</span>
+        <span class="hex">#CE4F7D</span>
+        <span class="cr" style="color:#f0b13a">4.17:1 · AA крупн.</span>
+      </div>
+    </div>
+    <div class="sw">
+      <div class="card" style="--c:#B53E69">
+        <div class="wash"></div>
+        <div class="cinner">
+          <div class="phase">ФАЗА</div>
+          <div class="big">12:00</div>
+          <div class="hint">бельій текст на фоне</div>
+        </div>
+      </div>
+      <div class="meta">
+        <span class="lbl">C · глубже</span>
+        <span class="hex">#B53E69</span>
+        <span class="cr" style="color:#43d17a">5.44:1 · AA</span>
+      </div>
+    </div></div>
+    </section>
+    <section class="row">
+      <div class="rowhead">
+        <div class="acc" style="background:#45C8E8"></div>
+        <div class="names"><h2>Дыхание</h2><span class="cur">текущий #45C8E8</span></div>
+      </div>
+      <div class="swrow">
+    <div class="sw">
+      <div class="card" style="--c:#2E9CB8">
+        <div class="wash"></div>
+        <div class="cinner">
+          <div class="phase">ФАЗА</div>
+          <div class="big">12:00</div>
+          <div class="hint">бельій текст на фоне</div>
+        </div>
+      </div>
+      <div class="meta">
+        <span class="lbl">A · светлее</span>
+        <span class="hex">#2E9CB8</span>
+        <span class="cr" style="color:#f0b13a">3.2:1 · AA крупн.</span>
+      </div>
+    </div>
+    <div class="sw">
+      <div class="card" style="--c:#2587A6">
+        <div class="wash"></div>
+        <div class="cinner">
+          <div class="phase">ФАЗА</div>
+          <div class="big">12:00</div>
+          <div class="hint">бельій текст на фоне</div>
+        </div>
+      </div>
+      <div class="meta">
+        <span class="lbl">B · баланс</span>
+        <span class="hex">#2587A6</span>
+        <span class="cr" style="color:#f0b13a">4.12:1 · AA крупн.</span>
+      </div>
+    </div>
+    <div class="sw">
+      <div class="card" style="--c:#1D7090">
+        <div class="wash"></div>
+        <div class="cinner">
+          <div class="phase">ФАЗА</div>
+          <div class="big">12:00</div>
+          <div class="hint">бельій текст на фоне</div>
+        </div>
+      </div>
+      <div class="meta">
+        <span class="lbl">C · глубже</span>
+        <span class="hex">#1D7090</span>
+        <span class="cr" style="color:#43d17a">5.57:1 · AA</span>
+      </div>
+    </div></div>
+    </section>
+    <section class="row">
+      <div class="rowhead">
+        <div class="acc" style="background:#FFA63D"></div>
+        <div class="names"><h2>Фокус</h2><span class="cur">текущий #FFA63D</span></div>
+      </div>
+      <div class="swrow">
+    <div class="sw">
+      <div class="card" style="--c:#CE7B22">
+        <div class="wash"></div>
+        <div class="cinner">
+          <div class="phase">ФАЗА</div>
+          <div class="big">12:00</div>
+          <div class="hint">бельій текст на фоне</div>
+        </div>
+      </div>
+      <div class="meta">
+        <span class="lbl">A · светлее</span>
+        <span class="hex">#CE7B22</span>
+        <span class="cr" style="color:#f0b13a">3.24:1 · AA крупн.</span>
+      </div>
+    </div>
+    <div class="sw">
+      <div class="card" style="--c:#C56F1C">
+        <div class="wash"></div>
+        <div class="cinner">
+          <div class="phase">ФАЗА</div>
+          <div class="big">12:00</div>
+          <div class="hint">бельій текст на фоне</div>
+        </div>
+      </div>
+      <div class="meta">
+        <span class="lbl">B · баланс</span>
+        <span class="hex">#C56F1C</span>
+        <span class="cr" style="color:#f0b13a">3.71:1 · AA крупн.</span>
+      </div>
+    </div>
+    <div class="sw">
+      <div class="card" style="--c:#AC5C14">
+        <div class="wash"></div>
+        <div class="cinner">
+          <div class="phase">ФАЗА</div>
+          <div class="big">12:00</div>
+          <div class="hint">бельій текст на фоне</div>
+        </div>
+      </div>
+      <div class="meta">
+        <span class="lbl">C · глубже</span>
+        <span class="hex">#AC5C14</span>
+        <span class="cr" style="color:#43d17a">4.89:1 · AA</span>
+      </div>
+    </div></div>
+    </section>
+</body></html>

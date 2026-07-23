@@ -1,0 +1,222 @@
+<!doctype html><html lang="ru"><head><meta charset="utf-8">
+<style>
+:root{
+  --bg:#000; --card:#181818; --card2:#1f1f20; --text:#F4F4F5; --muted:#8A8A92;
+  --track:rgba(255,255,255,.08); --accent:#B084F5;
+  --water:#5AA7FF; --orange:#FF8C5A; --pink:#FF6B9D; --yellow:#FFD166; --purple:#B084F5; --mint:#7CD992;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:radial-gradient(1200px 700px at 50% -10%,#141414,#000 60%);font-family:-apple-system,"SF Pro Display","Inter",sans-serif;color:var(--text);padding:54px 40px 70px}
+h1.page{font-size:30px;font-weight:700;letter-spacing:-.02em;text-align:center;margin-bottom:6px}
+p.sub{color:var(--muted);text-align:center;font-size:15px;margin-bottom:46px}
+.grid{display:flex;gap:46px;justify-content:center;flex-wrap:wrap;align-items:flex-start}
+.concept{width:320px}
+.concept .tag{display:flex;align-items:center;gap:8px;margin-bottom:6px}
+.concept .tag .n{width:24px;height:24px;border-radius:50%;background:var(--accent);color:#000;font-weight:700;font-size:13px;display:flex;align-items:center;justify-content:center}
+.concept h2{font-size:18px;font-weight:650;letter-spacing:-.01em}
+.concept .desc{color:var(--muted);font-size:13px;line-height:1.5;margin:6px 0 16px}
+/* phone */
+.phone{width:320px;height:680px;border-radius:46px;background:#000;border:1px solid #232323;
+  box-shadow:0 30px 70px rgba(0,0,0,.6),inset 0 0 0 6px #0b0b0b;overflow:hidden;position:relative}
+.notch{position:absolute;top:11px;left:50%;transform:translateX(-50%);width:108px;height:26px;background:#000;border-radius:16px;z-index:40}
+.sb{position:absolute;top:0;left:0;right:0;height:46px;display:flex;align-items:center;justify-content:space-between;padding:0 26px;font-size:13px;font-weight:600;z-index:30}
+.sb .r{display:flex;gap:6px;align-items:center;font-size:12px}
+.scr{position:absolute;inset:0;padding-top:46px}
+.faux{position:relative;overflow:hidden}
+.faux .emoji{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:74px}
+.faux .veil{position:absolute;inset:0;background:linear-gradient(180deg,rgba(0,0,0,.05) 30%,rgba(0,0,0,.72) 100%)}
+.chip{display:inline-flex;align-items:center;gap:5px;padding:5px 10px;border-radius:999px;font-size:11.5px;font-weight:600;
+  background:rgba(20,20,22,.55);backdrop-filter:blur(14px);border:1px solid rgba(255,255,255,.12)}
+.chip.solid{background:rgba(255,255,255,.92);color:#111;border:none}
+.hpad{padding:0 16px}
+.eyebrow{font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--muted);font-weight:600}
+</style></head><body>
+<h1 class="page">Сторис · Моменты — концепты</h1>
+<p class="sub">Запечатлеваешь момент (еда, прогулка…) с пометками: день, вес и т.д. 4 разных подхода — выбери направление.</p>
+<div class="grid" id="grid"></div>
+
+<script>
+const G=document.getElementById("grid");
+
+function statusbar(){return `<div class="sb"><span>9:41</span><div class="r"><span style="display:inline-block;width:17px;height:11px;border:1.4px solid #fff;border-radius:3px;position:relative"><span style="position:absolute;left:1.5px;top:1.5px;bottom:1.5px;width:9px;background:#fff;border-radius:1px"></span></span></div></div>`;}
+function notch(){return `<div class="notch"></div>`;}
+
+// faux photo block
+function photo(grad,emoji,h,extra=""){
+  return `<div class="faux" style="height:${h};background:${grad}">
+    <div class="emoji">${emoji}</div><div class="veil"></div>${extra}</div>`;
+}
+
+function phone(inner){return `<div class="phone">${notch()}${statusbar()}<div class="scr">${inner}</div></div>`;}
+
+/* ───────── CONCEPT 1 — Stories rail + fullscreen viewer ───────── */
+const c1 = `
+<div style="height:100%;background:linear-gradient(155deg,#3a2a5e,#1a1430 55%,#0c0a16);position:relative">
+  <div class="faux" style="position:absolute;inset:0;background:linear-gradient(150deg,#7a5a3a,#3a2618)">
+    <div class="emoji" style="font-size:120px">🥗</div>
+    <div style="position:absolute;inset:0;background:linear-gradient(180deg,rgba(0,0,0,.45) 0%,rgba(0,0,0,0) 26%,rgba(0,0,0,0) 52%,rgba(0,0,0,.82) 100%)"></div>
+  </div>
+  <!-- segmented progress -->
+  <div style="position:absolute;top:54px;left:14px;right:14px;display:flex;gap:5px;z-index:5">
+    <div style="flex:1;height:3px;border-radius:2px;background:#fff"></div>
+    <div style="flex:1;height:3px;border-radius:2px;background:linear-gradient(90deg,#fff 62%,rgba(255,255,255,.3) 62%)"></div>
+    <div style="flex:1;height:3px;border-radius:2px;background:rgba(255,255,255,.3)"></div>
+    <div style="flex:1;height:3px;border-radius:2px;background:rgba(255,255,255,.3)"></div>
+  </div>
+  <!-- header -->
+  <div style="position:absolute;top:70px;left:16px;right:16px;display:flex;align-items:center;gap:10px;z-index:5">
+    <div style="width:34px;height:34px;border-radius:50%;background:linear-gradient(135deg,#FF8C5A,#FF6B9D);display:flex;align-items:center;justify-content:center;font-size:16px">🍽</div>
+    <div style="flex:1"><div style="font-size:13px;font-weight:650">Обед</div><div style="font-size:11px;color:rgba(255,255,255,.6)">сегодня · 13:24</div></div>
+    <div style="font-size:18px;color:rgba(255,255,255,.85)">⋯</div>
+  </div>
+  <!-- bottom meta -->
+  <div style="position:absolute;bottom:0;left:0;right:0;padding:18px 16px 26px;z-index:5">
+    <div style="font-size:20px;font-weight:700;letter-spacing:-.01em;margin-bottom:12px">Боул с лососем 🐟</div>
+    <div style="display:flex;flex-wrap:wrap;gap:7px;margin-bottom:16px">
+      <span class="chip">📅 День 142</span>
+      <span class="chip">⚖️ 78.2 кг</span>
+      <span class="chip">🔥 540 ккал</span>
+      <span class="chip">📍 Дома</span>
+    </div>
+    <div style="display:flex;align-items:center;gap:10px">
+      <div style="flex:1;height:42px;border-radius:999px;background:rgba(255,255,255,.12);backdrop-filter:blur(10px);border:1px solid rgba(255,255,255,.15);display:flex;align-items:center;padding:0 16px;color:rgba(255,255,255,.55);font-size:13px">Добавить заметку…</div>
+      <div style="width:42px;height:42px;border-radius:50%;background:rgba(255,255,255,.14);display:flex;align-items:center;justify-content:center;font-size:18px">❤️</div>
+    </div>
+  </div>
+</div>`;
+
+/* ───────── CONCEPT 2 — Journal feed (rail entry + day-grouped cards) ───────── */
+function story(color,emoji,label,active){
+  const ring = active
+    ? `background:conic-gradient(${color},#fff,${color});`
+    : `background:rgba(255,255,255,.12);`;
+  return `<div style="display:flex;flex-direction:column;align-items:center;gap:6px;min-width:60px">
+    <div style="width:58px;height:58px;border-radius:50%;${ring}padding:2.5px">
+      <div class="faux" style="width:100%;height:100%;border-radius:50%;background:${color}22;border:2px solid #000;display:flex;align-items:center;justify-content:center;font-size:24px">${emoji}</div>
+    </div>
+    <span style="font-size:11px;color:var(--muted)">${label}</span></div>`;
+}
+const c2 = `
+<div style="height:100%;background:#000;overflow:hidden">
+  <div class="hpad" style="display:flex;align-items:center;justify-content:space-between;padding-top:6px;padding-bottom:12px">
+    <div style="font-size:24px;font-weight:700;letter-spacing:-.02em">Моменты</div>
+    <div style="width:34px;height:34px;border-radius:50%;background:var(--card);display:flex;align-items:center;justify-content:center;font-size:16px;color:var(--accent)">📷</div>
+  </div>
+  <!-- rail -->
+  <div style="display:flex;gap:10px;padding:0 12px 14px;overflow:hidden">
+    <div style="display:flex;flex-direction:column;align-items:center;gap:6px;min-width:60px">
+      <div style="width:58px;height:58px;border-radius:50%;border:2px dashed rgba(255,255,255,.25);display:flex;align-items:center;justify-content:center;font-size:24px;color:var(--accent)">＋</div>
+      <span style="font-size:11px;color:var(--muted)">Новый</span></div>
+    ${story('#FF8C5A','🥗','Обед',true)}
+    ${story('#7CD992','🚶','Парк',true)}
+    ${story('#5AA7FF','💧','Вода',false)}
+    ${story('#FFD166','☕️','Утро',false)}
+  </div>
+  <div class="hpad eyebrow" style="margin:4px 0 10px">Сегодня · 7 июня</div>
+  <!-- feed card -->
+  <div class="hpad">
+    <div style="border-radius:24px;overflow:hidden;background:var(--card);margin-bottom:14px">
+      ${photo('linear-gradient(150deg,#2e6b46,#13351f)','🚶‍♂️','210px',
+        `<div style="position:absolute;left:14px;bottom:12px;display:flex;gap:7px">
+           <span class="chip">📍 Парк Горького</span><span class="chip">👟 6 240 шагов</span></div>`)}
+      <div style="padding:13px 15px 15px">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:7px">
+          <span style="font-size:12px;color:var(--muted);font-weight:600">18:05</span>
+          <span style="width:3px;height:3px;border-radius:50%;background:var(--muted)"></span>
+          <span style="font-size:12px;color:var(--mint);font-weight:600">Прогулка</span>
+        </div>
+        <div style="font-size:15px;line-height:1.45">Вечерний круг по набережной 🌅 Закат сегодня — огонь.</div>
+      </div>
+    </div>
+    <div style="border-radius:24px;overflow:hidden;background:var(--card)">
+      ${photo('linear-gradient(150deg,#7a5a3a,#3a2618)','🥗','150px',
+        `<div style="position:absolute;left:14px;bottom:12px;display:flex;gap:7px">
+           <span class="chip">⚖️ 78.2</span><span class="chip">🔥 540</span></div>`)}
+    </div>
+  </div>
+</div>`;
+
+/* ───────── CONCEPT 3 — Mosaic / memories grid ───────── */
+function tile(grad,emoji,h,chip){
+  return `<div class="faux" style="height:${h};border-radius:18px;background:${grad}">
+    <div class="emoji" style="font-size:46px">${emoji}</div>
+    <div style="position:absolute;left:8px;bottom:8px"><span class="chip" style="font-size:10.5px;padding:4px 8px">${chip}</span></div></div>`;
+}
+const c3 = `
+<div style="height:100%;background:#000;overflow:hidden">
+  <div class="hpad" style="padding-top:6px;padding-bottom:12px">
+    <div style="font-size:24px;font-weight:700;letter-spacing:-.02em">Коллекция</div>
+    <div style="font-size:13px;color:var(--muted);margin-top:2px">248 моментов · 32 дня</div>
+  </div>
+  <div style="display:flex;gap:8px;padding:0 16px 14px;overflow:hidden">
+    <span class="chip solid" style="font-size:12px">Все</span>
+    <span class="chip" style="font-size:12px">🍽 Еда</span>
+    <span class="chip" style="font-size:12px">🚶 Прогулки</span>
+    <span class="chip" style="font-size:12px">⚖️ Вес</span>
+  </div>
+  <div class="hpad" style="display:flex;gap:8px">
+    <div style="flex:1;display:flex;flex-direction:column;gap:8px">
+      ${tile('linear-gradient(150deg,#7a5a3a,#3a2618)','🥗','150px','🔥 540')}
+      ${tile('linear-gradient(150deg,#2e6b46,#13351f)','🚶','110px','👟 6.2к')}
+      ${tile('linear-gradient(150deg,#3a4d7a,#16213f)','💧','96px','1.8 л')}
+    </div>
+    <div style="flex:1;display:flex;flex-direction:column;gap:8px">
+      ${tile('linear-gradient(150deg,#6b3a55,#33182a)','🍓','110px','завтрак')}
+      ${tile('linear-gradient(150deg,#7a6a3a,#3a3218)','☕️','150px','08:10')}
+      ${tile('linear-gradient(150deg,#4a3a7a,#221a3f)','🧘','110px','медит.')}
+    </div>
+  </div>
+</div>`;
+
+/* ───────── CONCEPT 4 — Day capsule recap ───────── */
+const c4 = `
+<div style="height:100%;background:linear-gradient(160deg,#1a1530,#0a0a12);overflow:hidden">
+  <div class="hpad" style="display:flex;align-items:center;justify-content:space-between;padding-top:8px;padding-bottom:6px">
+    <div style="font-size:14px;color:var(--muted)">‹ Июнь</div>
+    <div style="font-size:15px;font-weight:650">Капсула дня</div>
+    <div style="font-size:15px;color:var(--accent)">↗</div>
+  </div>
+  <div class="hpad" style="padding-top:14px">
+    <div style="border-radius:30px;padding:18px;background:linear-gradient(165deg,rgba(176,132,245,.18),rgba(255,255,255,.03));border:1px solid rgba(255,255,255,.1)">
+      <div style="display:flex;align-items:flex-end;justify-content:space-between;margin-bottom:16px">
+        <div><div style="font-size:34px;font-weight:800;letter-spacing:-.03em;line-height:1">Сб, 7</div>
+          <div style="font-size:13px;color:var(--muted);margin-top:2px">июня · 5 моментов</div></div>
+        <div style="text-align:right"><div style="font-size:11px;color:var(--muted)">вес</div>
+          <div style="font-size:22px;font-weight:700;color:var(--mint)">78.2<span style="font-size:12px;color:var(--muted)"> кг</span></div></div>
+      </div>
+      <!-- collage 2x2 -->
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;border-radius:18px;overflow:hidden;margin-bottom:16px">
+        ${photo('linear-gradient(150deg,#7a5a3a,#3a2618)','🥗','98px')}
+        ${photo('linear-gradient(150deg,#2e6b46,#13351f)','🚶','98px')}
+        ${photo('linear-gradient(150deg,#7a6a3a,#3a3218)','☕️','98px')}
+        ${photo('linear-gradient(150deg,#3a4d7a,#16213f)','💧','98px')}
+      </div>
+      <!-- stat row -->
+      <div style="display:flex;justify-content:space-between;text-align:center">
+        <div><div style="font-size:18px;font-weight:700">6.2к</div><div style="font-size:10.5px;color:var(--muted)">шаги</div></div>
+        <div><div style="font-size:18px;font-weight:700;color:var(--orange)">3</div><div style="font-size:10.5px;color:var(--muted)">приёма</div></div>
+        <div><div style="font-size:18px;font-weight:700;color:var(--water)">1.8л</div><div style="font-size:10.5px;color:var(--muted)">вода</div></div>
+        <div><div style="font-size:18px;font-weight:700">😊</div><div style="font-size:10.5px;color:var(--muted)">настр.</div></div>
+      </div>
+    </div>
+    <div style="display:flex;justify-content:center;gap:6px;margin-top:18px">
+      <span style="width:7px;height:7px;border-radius:50%;background:#fff"></span>
+      <span style="width:7px;height:7px;border-radius:50%;background:rgba(255,255,255,.25)"></span>
+      <span style="width:7px;height:7px;border-radius:50%;background:rgba(255,255,255,.25)"></span>
+    </div>
+  </div>
+</div>`;
+
+const data=[
+ ["Сторис-вьюер","Полноэкранный момент как в Stories: сегментный прогресс сверху, фото на весь экран, поверх — чипы (день, вес, ккал, локация) и поле заметки. Привычный жест-тап.",c1],
+ ["Лента-дневник","Сверху рельса кружков-сторис (вход), ниже — лента карточек по дням с фото и чипами прямо на снимке. Контент-ориентированно, спокойно.",c2],
+ ["Коллекция-мозаика","Pinterest-сетка всех моментов с фильтрами (Еда/Прогулки/Вес) и мини-чипами в углу. Для тех, кто копит и пересматривает.",c3],
+ ["Капсула дня","Один день = одна карточка-итог: коллаж 2×2 + сводка (вес, шаги, приёмы, настроение). Листаешь по дням как воспоминания.",c4],
+];
+data.forEach((d,i)=>{
+  const el=document.createElement("div");el.className="concept";
+  el.innerHTML=`<div class="tag"><span class="n">${i+1}</span><h2>${d[0]}</h2></div>
+    <div class="desc">${d[1]}</div>${phone(d[2])}`;
+  G.appendChild(el);
+});
+</script></body></html>

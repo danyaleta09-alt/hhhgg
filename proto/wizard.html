@@ -1,0 +1,862 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>Wizard prototype — Wellness</title>
+<style>
+  :root {
+    --bg: #000;
+    --panel: #0e0e10;
+    --container: #181818;
+    --container-2: #1f1f22;
+    --track: rgba(255,255,255,0.10);
+    --track-strong: rgba(255,255,255,0.18);
+    --text: #f4f4f5;
+    --muted: #8a8a92;
+    --accent: #b084f5;
+    --accent-soft: rgba(176,132,245,0.22);
+    --radius-input: 16px;
+    --radius-pill: 999px;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    background: #050507;
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Inter", sans-serif;
+    margin: 0;
+    padding: 0;
+  }
+  body {
+    padding: 40px 24px 60px;
+    background:
+      radial-gradient(900px 600px at 10% -10%, rgba(176,132,245,0.10), transparent 60%),
+      radial-gradient(900px 600px at 110% 110%, rgba(90,167,255,0.08), transparent 60%),
+      #050507;
+  }
+  h1 {
+    text-align: center;
+    font-weight: 700;
+    font-size: 22px;
+    letter-spacing: -0.02em;
+    margin: 0 0 6px;
+  }
+  .subtitle {
+    text-align: center;
+    color: var(--muted);
+    font-size: 13px;
+    margin-bottom: 36px;
+  }
+  .row {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 28px;
+    max-width: 1400px;
+    margin: 0 auto 48px;
+  }
+  .group-label {
+    text-align: center;
+    font-weight: 600;
+    font-size: 15px;
+    letter-spacing: 0.02em;
+    color: var(--muted);
+    text-transform: uppercase;
+    margin: 0 0 18px;
+  }
+
+  /* ---------- Phone frame ---------- */
+  .phone {
+    width: 100%;
+    max-width: 360px;
+    margin: 0 auto;
+    aspect-ratio: 360 / 780;
+    background: var(--bg);
+    border-radius: 38px;
+    border: 1px solid rgba(255,255,255,0.06);
+    box-shadow: 0 30px 80px -20px rgba(0,0,0,0.7);
+    position: relative;
+    overflow: hidden;
+    padding: 14px 18px 22px;
+    display: flex;
+    flex-direction: column;
+  }
+  .phone::before { /* notch / dynamic island */
+    content: "";
+    position: absolute;
+    top: 12px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 110px;
+    height: 28px;
+    border-radius: 16px;
+    background: #050507;
+  }
+  .status-bar {
+    height: 24px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0 8px;
+    font-size: 12px;
+    font-weight: 600;
+  }
+  .status-bar .icons { display: flex; gap: 5px; color: var(--text); opacity: 0.9; }
+  .header {
+    padding-top: 14px;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    height: 54px;
+  }
+  .back {
+    width: 28px; height: 28px;
+    display: grid; place-items: center;
+    color: var(--text);
+  }
+  .header-title {
+    font-size: 22px;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+  }
+
+  /* ---------- Progress bar ---------- */
+  .progress {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 6px;
+    margin: 6px 0 18px;
+  }
+  .progress .seg {
+    height: 4px;
+    background: var(--track);
+    border-radius: 2px;
+    overflow: hidden;
+  }
+  .progress .seg.done {
+    background: var(--accent);
+  }
+  .step-label {
+    color: var(--muted);
+    font-size: 12px;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    font-weight: 600;
+    margin-bottom: 14px;
+  }
+
+  /* ---------- Content area ---------- */
+  .content {
+    flex: 1;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    gap: 18px;
+  }
+  .field-label {
+    font-size: 13px;
+    color: var(--muted);
+    margin: 0 0 6px;
+    font-weight: 500;
+  }
+  .field {
+    margin-bottom: 4px;
+  }
+  .input {
+    background: var(--container);
+    border: none;
+    border-radius: var(--radius-input);
+    height: 56px;
+    padding: 0 18px;
+    width: 100%;
+    color: var(--text);
+    font: inherit;
+    font-size: 16px;
+    outline: none;
+  }
+  .input.cursor::after {
+    content: "|";
+    margin-left: 2px;
+    color: var(--accent);
+    animation: blink 1s steps(1) infinite;
+  }
+  @keyframes blink { 50% { opacity: 0; } }
+  .input.placeholder { color: #5b5b62; }
+  .row-2 { display: grid; grid-template-columns: 1fr 1.6fr; gap: 10px; }
+
+  /* unit chips */
+  .chips {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+  .chip {
+    background: var(--container);
+    border-radius: var(--radius-pill);
+    padding: 9px 14px;
+    font-size: 14px;
+    color: var(--text);
+    cursor: pointer;
+  }
+  .chip.active {
+    background: var(--accent-soft);
+    color: var(--accent);
+    font-weight: 600;
+  }
+
+  /* number stepper for target */
+  .stepper {
+    background: var(--container);
+    border-radius: var(--radius-input);
+    height: 56px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 8px;
+  }
+  .stepper .num {
+    font-size: 24px;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+  }
+  .stepper button {
+    width: 40px; height: 40px;
+    border: none;
+    background: var(--container-2);
+    color: var(--text);
+    border-radius: 12px;
+    font-size: 18px;
+    cursor: pointer;
+  }
+
+  /* time range picker */
+  .time-range {
+    display: grid;
+    grid-template-columns: 1fr auto 1fr;
+    align-items: center;
+    gap: 10px;
+  }
+  .time-cell {
+    background: var(--container);
+    border-radius: var(--radius-input);
+    height: 64px;
+    display: grid;
+    place-items: center;
+    font-size: 26px;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+  }
+  .time-arrow { color: var(--muted); }
+
+  /* icon grid */
+  .icon-preview {
+    background: var(--container);
+    border-radius: 22px;
+    height: 110px;
+    display: grid;
+    place-items: center;
+    gap: 6px;
+    margin-bottom: 16px;
+  }
+  .icon-preview .ic {
+    width: 56px; height: 56px;
+    border-radius: 999px;
+    display: grid; place-items: center;
+    color: var(--accent);
+  }
+  .icon-preview .ic svg { width: 32px; height: 32px; }
+  .icon-preview .caption {
+    font-size: 13px;
+    color: var(--muted);
+  }
+  .icon-grid {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 10px;
+    overflow: auto;
+    max-height: 230px;
+    padding-right: 4px;
+  }
+  .icon-grid::-webkit-scrollbar { display: none; }
+  .icon-cell {
+    aspect-ratio: 1;
+    border-radius: 14px;
+    background: var(--container);
+    display: grid;
+    place-items: center;
+    cursor: pointer;
+    color: var(--text);
+  }
+  .icon-cell svg { width: 26px; height: 26px; }
+  .icon-cell.active {
+    background: var(--accent-soft);
+    color: var(--accent);
+  }
+
+  /* color circles */
+  .color-row {
+    display: grid;
+    grid-template-columns: repeat(9, 1fr);
+    gap: 10px;
+  }
+  .swatch {
+    aspect-ratio: 1;
+    border-radius: 999px;
+    position: relative;
+    cursor: pointer;
+  }
+  .swatch.active::after {
+    content: "";
+    position: absolute;
+    inset: -6px;
+    border-radius: 999px;
+    border: 2px solid currentColor;
+    opacity: 0.4;
+  }
+
+  /* days row */
+  .days {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    gap: 6px;
+  }
+  .day {
+    background: var(--container);
+    border-radius: 12px;
+    height: 42px;
+    display: grid;
+    place-items: center;
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--text);
+    cursor: pointer;
+  }
+  .day.active {
+    background: var(--accent-soft);
+    color: var(--accent);
+    font-weight: 600;
+  }
+
+  /* toggle row */
+  .toggle-row {
+    background: var(--container);
+    border-radius: var(--radius-input);
+    padding: 14px 18px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .toggle-row .label { font-size: 15px; font-weight: 500; }
+  .toggle-row .sub { font-size: 12px; color: var(--muted); margin-top: 2px; }
+  .toggle {
+    width: 46px; height: 28px;
+    border-radius: 999px;
+    background: rgba(255,255,255,0.12);
+    position: relative;
+    flex-shrink: 0;
+  }
+  .toggle::after {
+    content: "";
+    position: absolute;
+    top: 3px; left: 3px;
+    width: 22px; height: 22px;
+    border-radius: 50%;
+    background: #fff;
+    transition: transform 0.2s;
+  }
+  .toggle.on { background: var(--accent); }
+  .toggle.on::after { transform: translateX(18px); }
+
+  .reminder-time {
+    background: var(--container);
+    border-radius: var(--radius-input);
+    padding: 16px 18px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .reminder-time .label { font-size: 15px; }
+  .reminder-time .val {
+    background: var(--container-2);
+    border-radius: 10px;
+    padding: 6px 12px;
+    font-size: 15px;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* CTA */
+  .cta-area {
+    margin-top: auto;
+    padding-top: 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+  .cta {
+    background: var(--accent);
+    color: #1a0f2e;
+    border: none;
+    height: 56px;
+    border-radius: 999px;
+    font-size: 16px;
+    font-weight: 600;
+    width: 100%;
+    cursor: pointer;
+    letter-spacing: -0.005em;
+  }
+  .cta.secondary {
+    background: transparent;
+    color: var(--muted);
+    font-weight: 500;
+  }
+
+  /* annotations */
+  .ann {
+    text-align: center;
+    color: var(--muted);
+    font-size: 12px;
+    margin-top: 12px;
+    letter-spacing: 0.02em;
+  }
+</style>
+</head>
+<body>
+
+<h1>Создание привычки и задачи — мастер 3 шагов</h1>
+<p class="subtitle">Прозрачная шапка как сейчас, под ней полоса прогресса, контент скроллится под прозрачную шапку. Кнопка снизу плавающая.</p>
+
+<!-- ============== HABIT FLOW ============== -->
+<div class="group-label">Создать привычку</div>
+<div class="row">
+
+  <!-- STEP 1 — habit -->
+  <div>
+    <div class="phone">
+      <div class="status-bar">
+        <span>00:54</span>
+        <span class="icons">•••• 4G •</span>
+      </div>
+      <div class="header">
+        <div class="back">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="22" height="22"><polyline points="15 6 9 12 15 18"/></svg>
+        </div>
+        <div class="header-title">Новая привычка</div>
+      </div>
+      <div class="progress">
+        <div class="seg done"></div>
+        <div class="seg"></div>
+        <div class="seg"></div>
+      </div>
+      <div class="step-label">Шаг 1 из 3 · Что и сколько</div>
+
+      <div class="content">
+        <div class="field">
+          <div class="field-label">Название</div>
+          <div class="input cursor">Прочитать книгу</div>
+        </div>
+        <div class="field">
+          <div class="field-label">Цель за день</div>
+          <div class="row-2">
+            <div class="stepper">
+              <button>−</button>
+              <div class="num">20</div>
+              <button>+</button>
+            </div>
+            <input class="input" placeholder="страниц" value="страниц">
+          </div>
+        </div>
+        <div class="field">
+          <div class="field-label">Часто используется</div>
+          <div class="chips">
+            <span class="chip">раз</span>
+            <span class="chip">минут</span>
+            <span class="chip active">страниц</span>
+            <span class="chip">стаканов</span>
+            <span class="chip">км</span>
+            <span class="chip">шагов</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="cta-area">
+        <button class="cta">Далее</button>
+      </div>
+    </div>
+    <div class="ann">Имя · цель за день · единица (чипсы для быстрого выбора)</div>
+  </div>
+
+  <!-- STEP 2 — habit -->
+  <div>
+    <div class="phone">
+      <div class="status-bar">
+        <span>00:54</span>
+        <span class="icons">•••• 4G •</span>
+      </div>
+      <div class="header">
+        <div class="back">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="22" height="22"><polyline points="15 6 9 12 15 18"/></svg>
+        </div>
+        <div class="header-title">Новая привычка</div>
+      </div>
+      <div class="progress">
+        <div class="seg done"></div>
+        <div class="seg done"></div>
+        <div class="seg"></div>
+      </div>
+      <div class="step-label">Шаг 2 из 3 · Вид</div>
+
+      <div class="content">
+        <div class="icon-preview">
+          <div class="ic" style="background: rgba(110,134,242,0.22); color: #6E86F2;">
+            <!-- book icon Solar-like -->
+            <svg viewBox="0 0 24 24" fill="currentColor"><path d="M4 4h12a3 3 0 0 1 3 3v13H7a3 3 0 0 1-3-3z" opacity=".35"/><path d="M4 4h12a3 3 0 0 1 3 3v13H7a3 3 0 0 1-3-3z" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M14 4v8l-2-1.5L10 12V4" fill="currentColor"/></svg>
+          </div>
+          <div class="caption">Прочитать книгу · 20 страниц</div>
+        </div>
+
+        <div class="field">
+          <div class="field-label">Иконка</div>
+          <div class="icon-grid">
+            <!-- 15 cells -->
+            <div class="icon-cell"><svg viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="12" r="9" opacity=".3"/><path d="M7 13h4v4h2v-4h4v-2h-4V7h-2v4H7z"/></svg></div>
+            <div class="icon-cell active"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M4 4h12a3 3 0 0 1 3 3v13H7a3 3 0 0 1-3-3z" opacity=".3"/><path d="M14 4v8l-2-1.5L10 12V4"/></svg></div>
+            <div class="icon-cell"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M10 3h4l1 4h-6z" opacity=".4"/><rect x="9" y="7" width="6" height="14" rx="3"/></svg></div>
+            <div class="icon-cell"><svg viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="6" r="2.5"/><path d="M9 11l3 2 4-2v3l-3 2 1 5h-2l-1-4-3 1z" opacity=".7"/></svg></div>
+            <div class="icon-cell"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M3 11h2v2H3zm16 0h2v2h-2zM7 9h2v6H7zm8 0h2v6h-2zM10 10h4v4h-4z"/></svg></div>
+            <div class="icon-cell"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 3a4 4 0 0 1 4 4c0 2-1 3-2 4 0 0 1 5-2 9-3-4-2-9-2-9-1-1-2-2-2-4a4 4 0 0 1 4-4z"/></svg></div>
+            <div class="icon-cell"><svg viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="12" r="3"/><path d="M12 4a8 8 0 0 1 7 4l-2 1A6 6 0 0 0 12 6zm0 16a8 8 0 0 1-7-4l2-1a6 6 0 0 0 5 3z" opacity=".5"/></svg></div>
+            <div class="icon-cell"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M5 12c0-4 3-7 7-7s7 3 7 7-3 7-7 7c-2 0-3-1-4-2l-2 2-1-1 2-2c-1-1-2-2-2-4z" opacity=".4"/><circle cx="12" cy="12" r="2.5"/></svg></div>
+            <div class="icon-cell"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M6 4h12v3l-3 6v7H9v-7L6 7z" opacity=".5"/><circle cx="12" cy="14" r="2"/></svg></div>
+            <div class="icon-cell"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M5 6h14l-2 13H7z" opacity=".4"/><path d="M9 6V4h6v2"/></svg></div>
+            <div class="icon-cell"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 21c-4 0-7-3-7-7 0-3 3-6 7-11 4 5 7 8 7 11 0 4-3 7-7 7z"/></svg></div>
+            <div class="icon-cell"><svg viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="12" r="4"/><path d="M12 2v3m0 14v3M2 12h3m14 0h3M5 5l2 2m10 10l2 2M5 19l2-2m10-10l2-2"/></svg></div>
+            <div class="icon-cell"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M3 18c2-2 4-2 6 0s4 2 6 0 4-2 6 0" stroke="currentColor" stroke-width="2" fill="none"/><circle cx="12" cy="9" r="3"/></svg></div>
+            <div class="icon-cell"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 3l3 6 6 1-4.5 4 1 6L12 17l-5.5 3 1-6L3 10l6-1z"/></svg></div>
+            <div class="icon-cell"><svg viewBox="0 0 24 24" fill="currentColor"><rect x="4" y="8" width="16" height="11" rx="3" opacity=".4"/><path d="M8 8V6a4 4 0 0 1 8 0v2"/></svg></div>
+          </div>
+        </div>
+
+        <div class="field" style="margin-top:6px;">
+          <div class="field-label">Цвет</div>
+          <div class="color-row">
+            <div class="swatch" style="background:#C28BFF"></div>
+            <div class="swatch" style="background:#9889FB"></div>
+            <div class="swatch active" style="background:#6E86F2; color:#6E86F2"></div>
+            <div class="swatch" style="background:#4EBEFF"></div>
+            <div class="swatch" style="background:#3FD5C5"></div>
+            <div class="swatch" style="background:#5BD89A"></div>
+            <div class="swatch" style="background:#B7DD5C"></div>
+            <div class="swatch" style="background:#FFD24A"></div>
+            <div class="swatch" style="background:#FFB347"></div>
+          </div>
+          <div class="color-row" style="margin-top:10px;">
+            <div class="swatch" style="background:#FF8E63"></div>
+            <div class="swatch" style="background:#FF7568"></div>
+            <div class="swatch" style="background:#F26280"></div>
+            <div class="swatch" style="background:#FF6FAA"></div>
+            <div class="swatch" style="background:#E37CD0"></div>
+            <div class="swatch" style="background:#C58FE6"></div>
+            <div class="swatch" style="background:#8FA0B3"></div>
+            <div class="swatch" style="background:#A89B7F"></div>
+            <div class="swatch" style="background:#E8E8EC"></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="cta-area">
+        <button class="cta">Далее</button>
+      </div>
+    </div>
+    <div class="ann">Большая превью + сетка иконок (Solar) + 18 цветов в 2 ряда</div>
+  </div>
+
+  <!-- STEP 3 — habit -->
+  <div>
+    <div class="phone">
+      <div class="status-bar">
+        <span>00:54</span>
+        <span class="icons">•••• 4G •</span>
+      </div>
+      <div class="header">
+        <div class="back">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="22" height="22"><polyline points="15 6 9 12 15 18"/></svg>
+        </div>
+        <div class="header-title">Новая привычка</div>
+      </div>
+      <div class="progress">
+        <div class="seg done"></div>
+        <div class="seg done"></div>
+        <div class="seg done"></div>
+      </div>
+      <div class="step-label">Шаг 3 из 3 · Расписание</div>
+
+      <div class="content">
+        <div class="field">
+          <div class="field-label">Дни недели</div>
+          <div class="days">
+            <div class="day active">Пн</div>
+            <div class="day active">Вт</div>
+            <div class="day active">Ср</div>
+            <div class="day active">Чт</div>
+            <div class="day active">Пт</div>
+            <div class="day">Сб</div>
+            <div class="day">Вс</div>
+          </div>
+        </div>
+
+        <div class="field">
+          <div class="field-label">Быстрый выбор</div>
+          <div class="chips">
+            <span class="chip">Каждый день</span>
+            <span class="chip active">Будни</span>
+            <span class="chip">Выходные</span>
+          </div>
+        </div>
+
+        <div class="field">
+          <div class="field-label">Напоминания</div>
+          <div class="toggle-row">
+            <div>
+              <div class="label">Напомнить</div>
+              <div class="sub">Пуш каждый выбранный день</div>
+            </div>
+            <div class="toggle on"></div>
+          </div>
+        </div>
+
+        <div class="reminder-time">
+          <div class="label">Время</div>
+          <div class="val">21:30</div>
+        </div>
+      </div>
+
+      <div class="cta-area">
+        <button class="cta">Создать привычку</button>
+      </div>
+    </div>
+    <div class="ann">Дни · быстрый выбор · напоминание + время</div>
+  </div>
+
+</div>
+
+<!-- ============== TASK FLOW ============== -->
+<div class="group-label">Создать задачу</div>
+<div class="row">
+
+  <!-- STEP 1 — task -->
+  <div>
+    <div class="phone">
+      <div class="status-bar">
+        <span>00:54</span>
+        <span class="icons">•••• 4G •</span>
+      </div>
+      <div class="header">
+        <div class="back">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="22" height="22"><polyline points="15 6 9 12 15 18"/></svg>
+        </div>
+        <div class="header-title">Новая задача</div>
+      </div>
+      <div class="progress">
+        <div class="seg done"></div>
+        <div class="seg"></div>
+        <div class="seg"></div>
+      </div>
+      <div class="step-label">Шаг 1 из 3 · Что и когда</div>
+
+      <div class="content">
+        <div class="field">
+          <div class="field-label">Название</div>
+          <div class="input cursor">Тренировка · Ноги</div>
+        </div>
+        <div class="field">
+          <div class="field-label">Время</div>
+          <div class="time-range">
+            <div class="time-cell">16:30</div>
+            <div class="time-arrow">→</div>
+            <div class="time-cell">17:15</div>
+          </div>
+        </div>
+        <div class="field">
+          <div class="field-label">Длительность</div>
+          <div class="chips">
+            <span class="chip">15м</span>
+            <span class="chip">30м</span>
+            <span class="chip active">45м</span>
+            <span class="chip">1ч</span>
+            <span class="chip">1ч 30м</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="cta-area">
+        <button class="cta">Далее</button>
+      </div>
+    </div>
+    <div class="ann">Имя · диапазон времени · чипсы длительности</div>
+  </div>
+
+  <!-- STEP 2 — task -->
+  <div>
+    <div class="phone">
+      <div class="status-bar">
+        <span>00:54</span>
+        <span class="icons">•••• 4G •</span>
+      </div>
+      <div class="header">
+        <div class="back">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="22" height="22"><polyline points="15 6 9 12 15 18"/></svg>
+        </div>
+        <div class="header-title">Новая задача</div>
+      </div>
+      <div class="progress">
+        <div class="seg done"></div>
+        <div class="seg done"></div>
+        <div class="seg"></div>
+      </div>
+      <div class="step-label">Шаг 2 из 3 · Вид</div>
+
+      <div class="content">
+        <div class="icon-preview">
+          <div class="ic" style="background: rgba(255,142,99,0.22); color: #FF8E63;">
+            <svg viewBox="0 0 24 24" fill="currentColor"><rect x="3" y="10" width="2" height="4" rx="1"/><rect x="19" y="10" width="2" height="4" rx="1"/><rect x="6" y="8" width="2" height="8" rx="1"/><rect x="16" y="8" width="2" height="8" rx="1"/><rect x="9" y="11" width="6" height="2"/></svg>
+          </div>
+          <div class="caption">Тренировка · Ноги · 16:30–17:15</div>
+        </div>
+
+        <div class="field">
+          <div class="field-label">Иконка</div>
+          <div class="icon-grid">
+            <div class="icon-cell active"><svg viewBox="0 0 24 24" fill="currentColor"><rect x="3" y="10" width="2" height="4"/><rect x="19" y="10" width="2" height="4"/><rect x="6" y="8" width="2" height="8"/><rect x="16" y="8" width="2" height="8"/><rect x="9" y="11" width="6" height="2"/></svg></div>
+            <div class="icon-cell"><svg viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="12" r="9" opacity=".35"/><circle cx="12" cy="12" r="4"/></svg></div>
+            <div class="icon-cell"><svg viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="12" r="9" opacity=".3"/><path d="M12 7v6l4 2"/></svg></div>
+            <div class="icon-cell"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M4 6h16v2H4zm0 5h16v2H4zm0 5h10v2H4z"/></svg></div>
+            <div class="icon-cell"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M5 4h14v6l-5 5v5l-4-2v-3L5 10z" opacity=".5"/></svg></div>
+            <div class="icon-cell"><svg viewBox="0 0 24 24" fill="currentColor"><circle cx="9" cy="8" r="3"/><circle cx="17" cy="8" r="3" opacity=".4"/><path d="M3 19c0-3 3-5 6-5s6 2 6 5z"/></svg></div>
+            <div class="icon-cell"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M4 4h16v4H4zm0 6h16v4H4zm0 6h16v4H4z" opacity=".5"/></svg></div>
+            <div class="icon-cell"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M5 9l7-4 7 4-7 4z" opacity=".5"/><path d="M5 9v6l7 4 7-4V9"/></svg></div>
+            <div class="icon-cell"><svg viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="12" r="9" opacity=".3"/><path d="M8 13l3 3 5-6"/></svg></div>
+            <div class="icon-cell"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M5 17l4-9 3 5 3-3 4 7z"/></svg></div>
+            <div class="icon-cell"><svg viewBox="0 0 24 24" fill="currentColor"><rect x="4" y="6" width="16" height="14" rx="3" opacity=".4"/><rect x="7" y="3" width="2" height="4"/><rect x="15" y="3" width="2" height="4"/></svg></div>
+            <div class="icon-cell"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M3 12h4l3-7 4 14 3-7h4"/></svg></div>
+            <div class="icon-cell"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 3l8 4v6c0 5-4 8-8 8s-8-3-8-8V7z" opacity=".5"/><path d="M9 12l2 2 4-4"/></svg></div>
+            <div class="icon-cell"><svg viewBox="0 0 24 24" fill="currentColor"><circle cx="7" cy="7" r="3"/><circle cx="17" cy="7" r="3"/><circle cx="12" cy="17" r="3"/></svg></div>
+            <div class="icon-cell"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M4 17l4-4 3 3 5-6 4 4v6H4z"/></svg></div>
+          </div>
+        </div>
+
+        <div class="field" style="margin-top:6px;">
+          <div class="field-label">Цвет</div>
+          <div class="color-row">
+            <div class="swatch" style="background:#C28BFF"></div>
+            <div class="swatch" style="background:#9889FB"></div>
+            <div class="swatch" style="background:#6E86F2"></div>
+            <div class="swatch" style="background:#4EBEFF"></div>
+            <div class="swatch" style="background:#3FD5C5"></div>
+            <div class="swatch" style="background:#5BD89A"></div>
+            <div class="swatch" style="background:#B7DD5C"></div>
+            <div class="swatch" style="background:#FFD24A"></div>
+            <div class="swatch" style="background:#FFB347"></div>
+          </div>
+          <div class="color-row" style="margin-top:10px;">
+            <div class="swatch active" style="background:#FF8E63; color:#FF8E63"></div>
+            <div class="swatch" style="background:#FF7568"></div>
+            <div class="swatch" style="background:#F26280"></div>
+            <div class="swatch" style="background:#FF6FAA"></div>
+            <div class="swatch" style="background:#E37CD0"></div>
+            <div class="swatch" style="background:#C58FE6"></div>
+            <div class="swatch" style="background:#8FA0B3"></div>
+            <div class="swatch" style="background:#A89B7F"></div>
+            <div class="swatch" style="background:#E8E8EC"></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="cta-area">
+        <button class="cta">Далее</button>
+      </div>
+    </div>
+    <div class="ann">Та же логика, что и в привычках — иконка + цвет</div>
+  </div>
+
+  <!-- STEP 3 — task -->
+  <div>
+    <div class="phone">
+      <div class="status-bar">
+        <span>00:54</span>
+        <span class="icons">•••• 4G •</span>
+      </div>
+      <div class="header">
+        <div class="back">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="22" height="22"><polyline points="15 6 9 12 15 18"/></svg>
+        </div>
+        <div class="header-title">Новая задача</div>
+      </div>
+      <div class="progress">
+        <div class="seg done"></div>
+        <div class="seg done"></div>
+        <div class="seg done"></div>
+      </div>
+      <div class="step-label">Шаг 3 из 3 · Когда и напомнить</div>
+
+      <div class="content">
+        <div class="field">
+          <div class="field-label">Дни недели</div>
+          <div class="days">
+            <div class="day active">Пн</div>
+            <div class="day">Вт</div>
+            <div class="day active">Ср</div>
+            <div class="day">Чт</div>
+            <div class="day active">Пт</div>
+            <div class="day">Сб</div>
+            <div class="day">Вс</div>
+          </div>
+        </div>
+
+        <div class="field">
+          <div class="field-label">Повторение</div>
+          <div class="chips">
+            <span class="chip">Без повтора</span>
+            <span class="chip">Каждый день</span>
+            <span class="chip active">3 раза в неделю</span>
+            <span class="chip">Будни</span>
+          </div>
+        </div>
+
+        <div class="field">
+          <div class="field-label">Напоминания</div>
+          <div class="toggle-row">
+            <div>
+              <div class="label">Напомнить</div>
+              <div class="sub">За 10 минут до начала</div>
+            </div>
+            <div class="toggle on"></div>
+          </div>
+        </div>
+
+        <div class="reminder-time">
+          <div class="label">За</div>
+          <div class="val">10 мин</div>
+        </div>
+      </div>
+
+      <div class="cta-area">
+        <button class="cta">Создать задачу</button>
+      </div>
+    </div>
+    <div class="ann">Дни · повтор · напоминание за N минут</div>
+  </div>
+
+</div>
+
+<div style="max-width:900px; margin: 30px auto 0; font-size:14px; color: var(--muted); line-height:1.6;">
+  <h3 style="color: var(--text); font-weight: 600;">Что реально появится в коде</h3>
+  <ul>
+    <li>Прогресс-бар сверху: 3 тонких сегмента (накопительно подсвечиваются).</li>
+    <li>«Назад» по стрелке возвращает на предыдущий шаг (на 1-м шаге — закрывает экран).</li>
+    <li>Старая логика OverlayScreen сохраняется: прозрачная шапка, контент скроллится сквозь, плавающая кнопка снизу.</li>
+    <li>На шаге «Вид» иконки берутся из расширенного набора Solar (запасу ≈80 иконок), цвета — новые 18-цветовые круги (та же реализация что и в Goals/Profile).</li>
+    <li>Привычки становятся реальными: данные хранятся per-day, на главной и на экране «План» прогресс зависит от того, отметил ли ты сегодня. Тап по привычке инкрементирует/тоглит выполнение.</li>
+    <li>Уведомления: тогл + время (для привычки) / минуты до (для задачи). Под капотом регистрируется AlarmManager-будильник + canned push с названием и иконкой.</li>
+  </ul>
+</div>
+</body>
+</html>

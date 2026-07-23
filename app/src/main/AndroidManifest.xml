@@ -1,0 +1,161 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+
+    <!--
+        INTERNET is required so the Telegram bindings screen can long-poll
+        api.telegram.org/bot<token>/getUpdates and pick up the /start <token>
+        message the bot receives after the user taps "Запустить" on the bot
+        chat. Telegram serves all bot-API endpoints over HTTPS, so there is
+        no need to relax usesCleartextTraffic.
+    -->
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.CAMERA" />
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
+    <uses-feature android:name="android.hardware.camera" android:required="false" />
+
+    <!--
+        Open Telegram via deep link from the bindings screen. On Android 11+
+        package visibility rules require this to be declared explicitly, even
+        for VIEW intents — without it queryIntentActivities returns nothing
+        and the "Open in Telegram" branch in the auth service silently falls
+        through to a web fallback.
+    -->
+    <queries>
+        <package android:name="org.telegram.messenger" />
+        <package android:name="org.telegram.plus" />
+        <package android:name="org.thunderdog.challegram" />
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <data android:scheme="https" android:host="t.me" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <data android:scheme="tg" />
+        </intent>
+    </queries>
+
+    <application
+        android:name=".LetifyApplication"
+        android:allowBackup="true"
+        android:icon="@mipmap/ic_launcher"
+        android:roundIcon="@mipmap/ic_launcher_round"
+        android:label="@string/app_name"
+        android:supportsRtl="true"
+        android:theme="@style/Theme.Letify"
+        tools:targetApi="31">
+        <activity
+            android:name=".MainActivity"
+            android:exported="true"
+            android:windowSoftInputMode="adjustResize"
+            android:theme="@style/Theme.Letify"
+            android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout|keyboardHidden|locale|layoutDirection|uiMode|density|fontScale">
+
+            <!--
+                The MAIN/LAUNCHER entry now lives on the activity-aliases below
+                instead of on MainActivity directly. This lets the user pick the
+                home-screen icon in Оформление → Навигация → Иконка: we enable the
+                chosen alias and disable the rest via PackageManager. Exactly one
+                alias is enabled at a time, so the launcher always shows one icon.
+            -->
+
+            <!--
+                Deep link target for the "Открыть приложение" inline button
+                that letifybot replies with after a successful /start <token>.
+                Telegram's inline-keyboard URL field accepts http(s) only, so
+                we register both the https:// alias and the bare letify://
+                scheme: the user's tap in Telegram becomes a VIEW intent that
+                Android routes here without round-tripping a browser. We do
+                not autoVerify the https host because we don't own the
+                domain — the URL itself is just an addressable handle, the
+                resolver picks Letify directly when it's the only filter
+                claiming it.
+            -->
+            <intent-filter android:autoVerify="false">
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="https" android:host="letify.app" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="letify" />
+            </intent-filter>
+        </activity>
+
+        <!--
+            Icon-variant launcher aliases. All point at MainActivity; each
+            carries its own adaptive icon. Coral is enabled by default; the
+            Иконка picker toggles which one is enabled. DONT_KILL_APP keeps the
+            app alive while the launcher swaps the icon.
+        -->
+        <activity-alias
+            android:name=".MainAliasCoral"
+            android:targetActivity=".MainActivity"
+            android:exported="true"
+            android:enabled="true"
+            android:icon="@mipmap/ic_launcher"
+            android:roundIcon="@mipmap/ic_launcher_round"
+            android:label="@string/app_name">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity-alias>
+        <activity-alias
+            android:name=".MainAliasPeach"
+            android:targetActivity=".MainActivity"
+            android:exported="true"
+            android:enabled="false"
+            android:icon="@mipmap/ic_peach"
+            android:roundIcon="@mipmap/ic_peach_round"
+            android:label="@string/app_name">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity-alias>
+        <activity-alias
+            android:name=".MainAliasIndigo"
+            android:targetActivity=".MainActivity"
+            android:exported="true"
+            android:enabled="false"
+            android:icon="@mipmap/ic_indigo"
+            android:roundIcon="@mipmap/ic_indigo_round"
+            android:label="@string/app_name">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity-alias>
+        <activity-alias
+            android:name=".MainAliasSeagreen"
+            android:targetActivity=".MainActivity"
+            android:exported="true"
+            android:enabled="false"
+            android:icon="@mipmap/ic_seagreen"
+            android:roundIcon="@mipmap/ic_seagreen_round"
+            android:label="@string/app_name">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity-alias>
+        <activity-alias
+            android:name=".MainAliasGolden"
+            android:targetActivity=".MainActivity"
+            android:exported="true"
+            android:enabled="false"
+            android:icon="@mipmap/ic_golden"
+            android:roundIcon="@mipmap/ic_golden_round"
+            android:label="@string/app_name">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity-alias>
+    </application>
+
+</manifest>

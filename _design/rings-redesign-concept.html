@@ -1,0 +1,514 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Кружки — Редизайн концепт</title>
+<style>
+  :root {
+    --bg: #000000;
+    --container: #181818;
+    --text: #f4f4f5;
+    --muted: #8a8a92;
+    --accent: #B084F5;
+
+    /* Habit colors */
+    --water: #5AA7FF;
+    --cal:   #FF8C5A;
+    --pink:  #FF6B9D;
+    --mint:  #7CD992;
+    --purple:#B084F5;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body {
+    background: #050507;
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Inter", sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  body {
+    padding: 36px 24px 80px;
+    background:
+      radial-gradient(800px 500px at 10% -10%, rgba(176,132,245,0.08), transparent 60%),
+      radial-gradient(800px 500px at 100% 100%, rgba(90,167,255,0.06), transparent 60%),
+      #050507;
+  }
+
+  h1 { text-align:center; font-weight:700; font-size:22px; letter-spacing:-0.02em; margin-bottom:6px; }
+  .subtitle { text-align:center; color:var(--muted); font-size:13px; margin-bottom:40px; max-width:700px; margin-inline:auto; line-height:1.55; }
+  h2 { font-size:16px; font-weight:600; margin-bottom:8px; letter-spacing:-0.01em; }
+  .desc { color:var(--muted); font-size:12px; line-height:1.5; margin-bottom:20px; max-width:360px; }
+  .row { display:flex; flex-wrap:wrap; gap:32px; justify-content:center; margin-bottom:48px; }
+  .card { width:360px; background:var(--container); border-radius:24px; padding:24px; border:1px solid rgba(255,255,255,0.06); }
+  .card-label { font-size:11px; font-weight:600; letter-spacing:0.06em; text-transform:uppercase; color:var(--muted); margin-bottom:16px; }
+
+  /* ============================================================
+     PHONE FRAME
+     ============================================================ */
+  .phone-wrap { display:flex; flex-direction:column; align-items:center; }
+  .phone {
+    width:320px; aspect-ratio:9/19.5; background:var(--bg); border-radius:36px;
+    border:1px solid rgba(255,255,255,0.08);
+    box-shadow:0 30px 80px -20px rgba(0,0,0,0.7), 0 0 0 5px #0a0a0c;
+    position:relative; overflow:hidden;
+    padding:56px 16px 24px;
+  }
+  .phone::before { content:""; position:absolute; top:12px; left:50%; transform:translateX(-50%);
+    width:100px; height:26px; border-radius:14px; background:#050507; z-index:10; }
+  .phone-title { font-size:22px; font-weight:700; text-align:center; margin-bottom:16px; }
+
+  /* ============================================================
+     EXPANDED STRIP — full circles
+     ============================================================ */
+  .strip-expanded {
+    display:flex; gap:8px; justify-content:center; margin-bottom:24px;
+    padding:4px 0;
+  }
+  .habit-cell { display:flex; flex-direction:column; align-items:center; width:64px; }
+  .ring-wrap {
+    width:56px; height:56px; position:relative; display:flex; align-items:center; justify-content:center;
+  }
+  .ring-wrap svg { position:absolute; inset:0; }
+  .ring-icon { font-size:22px; position:relative; z-index:2; }
+  .habit-label { font-size:11px; font-weight:500; margin-top:6px; color:var(--text); white-space:nowrap; }
+  .habit-sub { font-size:10px; color:var(--muted); }
+
+  /* ============================================================
+     COLLAPSED MINIATURE — 3 overlapping circles with bg-color ring
+     ============================================================ */
+  .mini-cluster { display:flex; align-items:center; position:relative; height:32px; }
+  .mini-ring {
+    width:30px; height:30px; border-radius:50%; position:relative;
+    display:flex; align-items:center; justify-content:center;
+    /* The "background-colored ring" effect — a border that matches the app bg */
+    border: 2.5px solid var(--bg);
+    z-index:1;
+  }
+  .mini-ring:nth-child(2) { margin-left:-10px; z-index:2; }
+  .mini-ring:nth-child(3) { margin-left:-10px; z-index:3; }
+  .mini-ring svg { width:100%; height:100%; position:absolute; inset:0; }
+  .mini-ring .mini-icon { font-size:13px; position:relative; z-index:2; }
+
+  /* ============================================================
+     VARIANT CARDS
+     ============================================================ */
+  .variant-demo { display:flex; align-items:center; gap:16px; padding:16px 0; }
+  .variant-demo .label { font-size:13px; color:var(--text); }
+  .variant-demo .sub { font-size:11px; color:var(--muted); margin-top:2px; }
+
+  /* Style B — thicker bg border */
+  .mini-ring.style-b { border-width:3.5px; }
+  .mini-ring.style-b:nth-child(2) { margin-left:-9px; }
+  .mini-ring.style-b:nth-child(3) { margin-left:-9px; }
+
+  /* Style C — shadow instead of border, overlap tighter */
+  .mini-ring.style-c {
+    border:none;
+    box-shadow: -2px 0 6px rgba(0,0,0,0.5), 0 0 0 2px var(--bg);
+  }
+  .mini-ring.style-c:first-child { box-shadow: 0 0 0 2px var(--bg); }
+  .mini-ring.style-c:nth-child(2) { margin-left:-11px; }
+  .mini-ring.style-c:nth-child(3) { margin-left:-11px; }
+
+  /* Style D — glow accent ring (story-like gradient border) */
+  .mini-ring.style-d {
+    border: none;
+    padding: 2px;
+    background: var(--bg);
+  }
+  .mini-ring.style-d::before {
+    content: "";
+    position: absolute;
+    inset: -2.5px;
+    border-radius: 50%;
+    z-index: -1;
+  }
+  .mini-ring.style-d:nth-child(2) { margin-left:-9px; }
+  .mini-ring.style-d:nth-child(3) { margin-left:-9px; }
+
+  /* Animation demo */
+  .anim-row { display:flex; align-items:center; gap:20px; margin:16px 0; }
+  .arrow { color:var(--muted); font-size:20px; }
+
+  /* Phone screen sections */
+  .section-label { font-size:12px; font-weight:600; color:var(--muted); letter-spacing:0.03em; margin-bottom:12px; }
+  .task-card {
+    background:var(--container); border-radius:16px; padding:12px 14px;
+    margin-bottom:8px; display:flex; align-items:center; gap:10px;
+  }
+  .task-icon { font-size:18px; }
+  .task-info { flex:1; }
+  .task-name { font-size:13px; font-weight:500; }
+  .task-time { font-size:11px; color:var(--muted); margin-top:1px; }
+  .task-badge { font-size:10px; color:var(--mint); font-weight:500; }
+
+  /* Transition preview */
+  .transition-wrap { position:relative; }
+  .transition-strip { transition: all 0.6s cubic-bezier(0.4, 0, 0.2, 1); }
+  
+  /* Interactive demo */
+  .demo-slider-wrap { text-align:center; margin:12px 0 20px; }
+  .demo-slider { width:240px; accent-color:var(--accent); }
+  .demo-slider-label { font-size:11px; color:var(--muted); margin-top:4px; }
+
+  /* Section separator */
+  .sep { height:1px; background:rgba(255,255,255,0.06); margin:48px 0; }
+</style>
+</head>
+<body>
+
+<h1>Кружки привычек — Редизайн</h1>
+<p class="subtitle">
+  Концепт нового вида кружков: непрозрачный фон, несколько вариантов свёрнутой миниатюры.
+  Стиль «как у сторис» — кружки с нахлёстом, обводка под цвет фона приложения.
+</p>
+
+<!-- ============================================================
+     SECTION 1 — EXPANDED STATE (reference)
+     ============================================================ -->
+<h2 style="text-align:center; margin-bottom:16px;">Развёрнутое состояние (текущее)</h2>
+<div class="row">
+  <div class="card">
+    <div class="card-label">Полная полоска привычек</div>
+    <div class="strip-expanded" id="expandedStrip">
+      <!-- Rendered by JS -->
+    </div>
+    <p class="desc">Кружки в полном размере — с иконкой, названием и прогрессом. Горизонтальный скролл если привычек больше 4.</p>
+  </div>
+</div>
+
+<div class="sep"></div>
+
+<!-- ============================================================
+     SECTION 2 — COLLAPSED MINIATURE VARIANTS
+     ============================================================ -->
+<h2 style="text-align:center; margin-bottom:6px;">Свёрнутая миниатюра — варианты</h2>
+<p class="subtitle" style="margin-bottom:32px;">
+  При скролле вверх кружки сворачиваются в 3 миниатюры справа от заголовка «план».<br>
+  Ниже — 4 варианта как это может выглядеть.
+</p>
+
+<div class="row">
+
+  <!-- VARIANT A: Clean bg-border overlap (основной) -->
+  <div class="card">
+    <div class="card-label">Вариант A — Обводка фоном (основной)</div>
+    <div class="variant-demo">
+      <div class="mini-cluster" id="miniA"></div>
+      <div>
+        <div class="label">Обводка под цвет фона</div>
+        <div class="sub">2.5px border цвета фона. Нахлёст 10px. Чистый, минималистичный вид.</div>
+      </div>
+    </div>
+    <div style="display:flex; align-items:center; gap:14px; padding:8px 0;">
+      <span style="font-size:20px; font-weight:700;">план</span>
+      <span style="flex:1;"></span>
+      <div class="mini-cluster" id="miniA2"></div>
+    </div>
+    <p class="desc" style="margin-top:8px;">Как у сторис в инстаграме — кружки наезжают друг на друга, белая (или чёрная) обводка отделяет их. Самый чистый вариант.</p>
+  </div>
+
+  <!-- VARIANT B: Thicker border -->
+  <div class="card">
+    <div class="card-label">Вариант B — Толстая обводка</div>
+    <div class="variant-demo">
+      <div class="mini-cluster" id="miniB"></div>
+      <div>
+        <div class="label">Толстая обводка 3.5px</div>
+        <div class="sub">Более выраженное разделение. Хорошо читается на любом фоне.</div>
+      </div>
+    </div>
+    <div style="display:flex; align-items:center; gap:14px; padding:8px 0;">
+      <span style="font-size:20px; font-weight:700;">план</span>
+      <span style="flex:1;"></span>
+      <div class="mini-cluster" id="miniB2"></div>
+    </div>
+  </div>
+
+  <!-- VARIANT C: Shadow separation -->
+  <div class="card">
+    <div class="card-label">Вариант C — Тень + обводка</div>
+    <div class="variant-demo">
+      <div class="mini-cluster" id="miniC"></div>
+      <div>
+        <div class="label">Тень + тонкая обводка</div>
+        <div class="sub">Мягкая тень слева, тонкая обводка фоном. Более «объёмный» вид.</div>
+      </div>
+    </div>
+    <div style="display:flex; align-items:center; gap:14px; padding:8px 0;">
+      <span style="font-size:20px; font-weight:700;">план</span>
+      <span style="flex:1;"></span>
+      <div class="mini-cluster" id="miniC2"></div>
+    </div>
+  </div>
+
+  <!-- VARIANT D: Accent ring (story-border style) -->
+  <div class="card">
+    <div class="card-label">Вариант D — Цветная обводка + фон</div>
+    <div class="variant-demo">
+      <div class="mini-cluster" id="miniD"></div>
+      <div>
+        <div class="label">Цветное кольцо прогресса</div>
+        <div class="sub">Тонкое кольцо цвета привычки + обводка фоном. Максимально «сторис».</div>
+      </div>
+    </div>
+    <div style="display:flex; align-items:center; gap:14px; padding:8px 0;">
+      <span style="font-size:20px; font-weight:700;">план</span>
+      <span style="flex:1;"></span>
+      <div class="mini-cluster" id="miniD2"></div>
+    </div>
+    <p class="desc" style="margin-top:8px;">Самый «сторис» вариант — цветное кольцо намекает на прогресс, как градиентный бордер у непросмотренных сторис.</p>
+  </div>
+
+</div>
+
+<div class="sep"></div>
+
+<!-- ============================================================
+     SECTION 3 — INTERACTIVE PHONE DEMO
+     ============================================================ -->
+<h2 style="text-align:center; margin-bottom:6px;">Интерактивный превью</h2>
+<p class="subtitle" style="margin-bottom:24px;">Двигай ползунок чтобы увидеть плавную анимацию сворачивания.</p>
+
+<div class="row">
+  <div class="phone-wrap">
+    <div class="phone" id="demoPhone">
+      <div class="phone-title">план</div>
+      <div id="demoRings" style="position:relative; height:110px; margin-bottom:16px;"></div>
+      <div class="section-label">Расписание на сегодня</div>
+      <div class="task-card">
+        <span class="task-icon">🏃</span>
+        <div class="task-info">
+          <div class="task-name">Утренняя пробежка</div>
+          <div class="task-time">07:00 · 30 мин</div>
+        </div>
+        <span class="task-badge">через 15 мин</span>
+      </div>
+      <div class="task-card">
+        <span class="task-icon">📖</span>
+        <div class="task-info">
+          <div class="task-name">Чтение</div>
+          <div class="task-time">08:00 · 45 мин</div>
+        </div>
+      </div>
+      <div class="task-card">
+        <span class="task-icon">🧘</span>
+        <div class="task-info">
+          <div class="task-name">Медитация</div>
+          <div class="task-time">09:00 · 15 мин</div>
+        </div>
+      </div>
+    </div>
+    <div class="demo-slider-wrap">
+      <input type="range" min="0" max="100" value="0" class="demo-slider" id="collapseSlider">
+      <div class="demo-slider-label">← развёрнуто&ensp;|&ensp;свёрнуто →</div>
+    </div>
+  </div>
+</div>
+
+<div class="sep"></div>
+
+<!-- ============================================================
+     SECTION 4 — LIGHT THEME VARIANTS
+     ============================================================ -->
+<h2 style="text-align:center; margin-bottom:6px;">Светлая тема</h2>
+<p class="subtitle" style="margin-bottom:24px;">Те же варианты на светлом фоне — обводка белого цвета фона.</p>
+
+<div class="row">
+  <div class="card" style="background:#F1F1F3; border-color:rgba(0,0,0,0.08);">
+    <div class="card-label" style="color:#6B6B73;">Вариант A — Светлая тема</div>
+    <div style="display:flex; align-items:center; gap:14px; padding:8px 0;">
+      <span style="font-size:20px; font-weight:700; color:#18181B;">план</span>
+      <span style="flex:1;"></span>
+      <div class="mini-cluster" id="miniLightA"></div>
+    </div>
+  </div>
+  <div class="card" style="background:#F1F1F3; border-color:rgba(0,0,0,0.08);">
+    <div class="card-label" style="color:#6B6B73;">Вариант D — Светлая тема</div>
+    <div style="display:flex; align-items:center; gap:14px; padding:8px 0;">
+      <span style="font-size:20px; font-weight:700; color:#18181B;">план</span>
+      <span style="flex:1;"></span>
+      <div class="mini-cluster" id="miniLightD"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ── Data ──
+const habits = [
+  { name: 'Вода',       icon: '💧', color: '#5AA7FF', progress: 0.6  },
+  { name: 'Калории',    icon: '🔥', color: '#FF8C5A', progress: 0.45 },
+  { name: 'Спорт',      icon: '🏋️', color: '#FF6B9D', progress: 0.8  },
+  { name: 'Сон',        icon: '😴', color: '#7CD992', progress: 0.33 },
+  { name: 'Медитация',  icon: '🧘', color: '#B084F5', progress: 0.55 },
+];
+
+// ── SVG Ring Generator ──
+function ringSVG(color, progress, size, strokeWidth = 3) {
+  const r = (size - strokeWidth) / 2;
+  const c = size / 2;
+  const circ = 2 * Math.PI * r;
+  const fillAlpha = 0.30;
+  const hexToRgb = hex => {
+    const m = hex.match(/\w\w/g);
+    return m.map(x => parseInt(x, 16)).join(',');
+  };
+  return `<svg width="${size}" height="${size}" viewBox="0 0 ${size} ${size}">
+    <circle cx="${c}" cy="${c}" r="${r - strokeWidth/2}" fill="rgba(${hexToRgb(color)},${fillAlpha})" />
+    <circle cx="${c}" cy="${c}" r="${r}"
+      fill="none" stroke="${color}" stroke-width="${strokeWidth}"
+      stroke-linecap="round"
+      stroke-dasharray="${circ}" stroke-dashoffset="${circ * (1 - progress)}"
+      transform="rotate(-90 ${c} ${c})" />
+  </svg>`;
+}
+
+// ── Render expanded strip ──
+function renderExpanded(containerId) {
+  const el = document.getElementById(containerId);
+  el.innerHTML = habits.map(h => `
+    <div class="habit-cell">
+      <div class="ring-wrap">${ringSVG(h.color, h.progress, 56, 3)}<span class="ring-icon">${h.icon}</span></div>
+      <div class="habit-label">${h.name}</div>
+      <div class="habit-sub">${Math.round(h.progress * 100)}%</div>
+    </div>
+  `).join('');
+}
+
+// ── Render mini cluster ──
+function renderMini(containerId, styleClass = '', bgColor = '#000000') {
+  const el = document.getElementById(containerId);
+  const visible = habits.slice(0, 3);
+  el.innerHTML = visible.map((h, i) => {
+    const border = styleClass.includes('style-d')
+      ? `border:2.5px solid ${bgColor}; box-shadow: 0 0 0 2px ${h.color};`
+      : `border-color:${bgColor};`;
+    return `<div class="mini-ring ${styleClass}" style="${border}; ${i > 0 ? '' : ''}">
+      ${ringSVG(h.color, h.progress, 30, 2)}
+      <span class="mini-icon">${h.icon}</span>
+    </div>`;
+  }).join('');
+}
+
+// ── Initialize all variants ──
+renderExpanded('expandedStrip');
+
+// Dark theme variants
+renderMini('miniA', '', '#000000');
+renderMini('miniA2', '', '#000000');
+renderMini('miniB', 'style-b', '#000000');
+renderMini('miniB2', 'style-b', '#000000');
+renderMini('miniC', 'style-c', '#000000');
+renderMini('miniC2', 'style-c', '#000000');
+renderMini('miniD', 'style-d', '#000000');
+renderMini('miniD2', 'style-d', '#000000');
+
+// Light theme variants
+renderMini('miniLightA', '', '#F1F1F3');
+renderMini('miniLightD', 'style-d', '#F1F1F3');
+
+// ── Interactive phone demo ──
+const slider = document.getElementById('collapseSlider');
+const demoRingsEl = document.getElementById('demoRings');
+
+function smoothstep(x) { return x * x * (3 - 2 * x); }
+
+function renderDemoState(rawT) {
+  const t = rawT / 100;
+  const s = smoothstep(t); // eased progress
+
+  const phoneW = 288; // phone inner width
+  const titleH = 30;
+  const ringSize = 56;
+  const cellW = 64;
+  const cellGap = 8;
+  const hPad = 8;
+  const miniSize = 30;
+  const miniSpacing = 19;
+  const rightPad = 16;
+  const miniCount = 3;
+
+  // Target cluster position (right-aligned in title row)
+  const clusterStartX = phoneW - rightPad - miniSize / 2 - (miniCount - 1) * miniSpacing;
+
+  let html = '';
+  habits.forEach((h, i) => {
+    const layoutCenterX = hPad + cellW / 2 + i * (cellW + cellGap);
+    const isOverflow = i >= miniCount;
+    const slot = Math.min(i, miniCount - 1);
+    const targetCenterX = clusterStartX + slot * miniSpacing;
+
+    let alpha, scale, tx, ty;
+    if (isOverflow) {
+      // Fade early, no movement
+      const fadeRaw = Math.min(t * 3, 1);
+      alpha = Math.max(0, 1 - fadeRaw * fadeRaw);
+      scale = 1;
+      tx = 0;
+      ty = -s * 80;
+    } else {
+      alpha = 1;
+      scale = 1 + (miniSize / ringSize - 1) * s;
+      tx = (targetCenterX - layoutCenterX) * s;
+      ty = -s * 80;
+    }
+
+    // Label alpha
+    const labelAlpha = Math.max(0, 1 - s * 2.4);
+
+    const left = layoutCenterX - cellW / 2 + tx;
+    const top = 10;
+    html += `<div style="
+      position:absolute;
+      left:${left}px;
+      top:${top}px;
+      width:${cellW}px;
+      display:flex;
+      flex-direction:column;
+      align-items:center;
+      transform: translateY(${ty}px) scale(${scale});
+      opacity:${alpha};
+      transform-origin: center top;
+      transition: none;
+      pointer-events:none;
+    ">
+      <div style="width:${ringSize}px; height:${ringSize}px; position:relative; display:flex; align-items:center; justify-content:center;">
+        ${ringSVG(h.color, h.progress, ringSize, 3)}
+        <span style="font-size:22px; position:relative; z-index:2;">${h.icon}</span>
+      </div>
+      <div style="margin-top:6px; font-size:11px; font-weight:500; opacity:${labelAlpha}; white-space:nowrap;">${h.name}</div>
+      <div style="font-size:10px; color:var(--muted); opacity:${labelAlpha};">${Math.round(h.progress*100)}%</div>
+    </div>`;
+  });
+
+  // When fully collapsed, show the mini cluster with bg-border overlay
+  if (t > 0.7) {
+    const clusterAlpha = Math.min(1, (t - 0.7) / 0.3);
+    const vis = habits.slice(0, 3);
+    let miniHtml = `<div style="position:absolute; right:${rightPad}px; top:2px; display:flex; align-items:center; opacity:${clusterAlpha}; pointer-events:none;">`;
+    vis.forEach((h, i) => {
+      const ml = i > 0 ? -10 : 0;
+      miniHtml += `<div style="
+        width:${miniSize}px; height:${miniSize}px; border-radius:50%; position:relative;
+        display:flex; align-items:center; justify-content:center;
+        border:2.5px solid var(--bg);
+        margin-left:${ml}px;
+        z-index:${i + 1};
+      ">${ringSVG(h.color, h.progress, miniSize, 2)}<span style="font-size:12px; position:relative; z-index:2;">${h.icon}</span></div>`;
+    });
+    miniHtml += '</div>';
+    html += miniHtml;
+  }
+
+  demoRingsEl.innerHTML = html;
+}
+
+slider.addEventListener('input', () => renderDemoState(slider.value));
+renderDemoState(0);
+
+// ── Привычки label fade ──
+// (already handled inside the demo render)
+</script>
+
+</body>
+</html>
