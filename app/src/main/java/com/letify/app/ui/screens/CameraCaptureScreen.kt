@@ -18,6 +18,9 @@ import androidx.camera.video.Recording
 import androidx.camera.video.VideoRecordEvent
 import androidx.camera.view.PreviewView
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.AnimatedVisibilityScope
+import androidx.compose.animation.EnterTransition
+import androidx.compose.animation.ExitTransition
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.animateDpAsState
@@ -385,7 +388,11 @@ fun CameraCaptureScreen(
             }
 
             // Recording timer pill — red dot + running mm:ss, Telegram-style.
-            AnimatedVisibility(
+            // FadeScaleVisibility is a top-level helper so AnimatedVisibility
+            // resolves to the non-scoped overload (calling it directly here
+            // would pick ColumnScope.AnimatedVisibility from the outer Column
+            // and fail to compile inside this Box).
+            FadeScaleVisibility(
                 visible = isRecording,
                 enter = fadeIn(tween(140)) + scaleIn(initialScale = 0.85f, animationSpec = tween(140)),
                 exit = fadeOut(tween(120)),
@@ -468,7 +475,7 @@ fun CameraCaptureScreen(
                     .align(Alignment.CenterStart)
                     .size(48.dp),
             ) {
-                AnimatedVisibility(
+                FadeScaleVisibility(
                     visible = lastThumb != null,
                     enter = fadeIn(tween(180)) + scaleIn(initialScale = 0.7f, animationSpec = tween(180)),
                     exit = fadeOut(),
@@ -587,4 +594,28 @@ fun CameraCaptureScreen(
                 .padding(bottom = 10.dp),
         )
     }
+}
+
+/**
+ * Thin wrapper around the top-level [AnimatedVisibility] so call sites nested
+ * inside a [Column] (where [androidx.compose.foundation.layout.ColumnScope]
+ * is an implicit receiver) don't accidentally resolve to the ColumnScope
+ * extension overload — that overload can't be invoked from a Box child and
+ * fails to compile ("cannot be called in this context with an implicit receiver").
+ */
+@Composable
+private fun FadeScaleVisibility(
+    visible: Boolean,
+    modifier: Modifier = Modifier,
+    enter: EnterTransition,
+    exit: ExitTransition,
+    content: @Composable AnimatedVisibilityScope.() -> Unit,
+) {
+    AnimatedVisibility(
+        visible = visible,
+        modifier = modifier,
+        enter = enter,
+        exit = exit,
+        content = content,
+    )
 }
