@@ -394,12 +394,14 @@ class AppState(
         bindingStore?.clear()
     }
 
-    // Navbar configuration — order of items and which tab opens by default.
-    val navbarOrder: SnapshotStateList<Tab> = mutableStateListOf(
-        Tab.Home, Tab.Plan, Tab.Profile,
-    )
-    // Default landing tab — persisted so the user's pick on Оформление → Навбар
-    // survives a relaunch (was in-memory only, so it reset to Главная).
+    // Fixed tab order — drives slide direction in the tab pager. There is no
+    // more on-screen navbar to reorder, so this is just a constant now (used
+    // to be a user-editable SnapshotStateList before the navbar was removed).
+    val tabOrder: List<Tab> = listOf(Tab.Home, Tab.Plan, Tab.Profile)
+
+    // Default landing tab — persisted so the user's pick on Оформление →
+    // Стартовый экран survives a relaunch (was in-memory only, so it reset
+    // to Главная).
     private val _defaultTab = mutableStateOf(tabFromKey(dataStore?.loadDefaultTab(Tab.Home.key)) ?: Tab.Home)
     var defaultTab: Tab
         get() = _defaultTab.value
@@ -407,17 +409,6 @@ class AppState(
     var currentTab by mutableStateOf(
         _defaultTab.value.let { if (it == Tab.Nutrition) Tab.Home else it },
     )
-
-    /** The factory navbar layout — order + default landing tab. */
-    private val defaultNavbarOrder: List<Tab> =
-        listOf(Tab.Home, Tab.Plan, Tab.Profile)
-
-    /** Restore the navbar order and default tab to their factory values. */
-    fun resetNavbar() {
-        navbarOrder.clear()
-        navbarOrder.addAll(defaultNavbarOrder)
-        defaultTab = Tab.Home
-    }
 
     // True while a scrollable screen is actively being scrolled/flung. The
     // frosted navbar reads this and DROPS its real-time blur for the duration

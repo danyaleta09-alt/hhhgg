@@ -12,12 +12,9 @@ import androidx.compose.animation.core.spring
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.gestures.detectDragGestures
-import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -39,32 +36,22 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.mutableIntStateOf
-import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.layout.boundsInWindow
-import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
 import com.letify.app.ui.AppIconVariant
 import com.letify.app.ui.applyAppIcon
-import androidx.compose.ui.platform.LocalHapticFeedback
-import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.zIndex
 import com.letify.app.ui.components.AccentSwitch
 import com.letify.app.ui.components.ColorPickerGrid
-import com.letify.app.ui.components.NoFeedbackButton
 import com.letify.app.ui.components.OverlayHost
 import com.letify.app.ui.components.RoundedSlideOverlay
 import com.letify.app.ui.components.SettingsCard
@@ -75,8 +62,6 @@ import com.letify.app.ui.components.overlayHostShiftFraction
 import com.letify.app.ui.components.rememberParallaxProgress
 import com.letify.app.ui.components.noFeedbackClick
 import com.letify.app.ui.components.screenHPad
-import com.letify.app.ui.components.tabIcon
-import com.letify.app.ui.components.tabTitle
 import com.letify.app.ui.icons.SolarIcon
 import com.letify.app.ui.state.LocalAppState
 import com.letify.app.ui.state.Tab
@@ -86,7 +71,23 @@ import com.letify.app.ui.theme.ThemePalette
 import com.letify.app.ui.theme.Letify
 import com.letify.app.ui.theme.LetifyColors
 
-private enum class AppearanceRoute { Root, Navbar, Animation }
+private enum class AppearanceRoute { Root, DefaultTab, Animation }
+
+/** Icon glyph for each tab — used by the "Стартовый экран" tab picker below. */
+private fun tabIcon(tab: Tab): String = when (tab) {
+    Tab.Home -> "home-2-bold-duotone"
+    Tab.Nutrition -> "apple-bold-duotone"
+    Tab.Plan -> "calendar-bold-duotone"
+    Tab.Profile -> "user-bold-duotone"
+}
+
+/** Human-readable name for every supported tab. */
+private fun tabTitle(tab: Tab): String = when (tab) {
+    Tab.Home -> "Главная"
+    Tab.Nutrition -> "Питание"
+    Tab.Plan -> "План"
+    Tab.Profile -> "Профиль"
+}
 
 @Composable
 fun AppearanceScreen(onBack: () -> Unit) {
@@ -108,7 +109,7 @@ fun AppearanceScreen(onBack: () -> Unit) {
         OverlayHost(parallaxProgress = parallax) {
             AppearanceRoot(
                 onBack = onBack,
-                onNavbar = { route = AppearanceRoute.Navbar },
+                onDefaultTab = { route = AppearanceRoute.DefaultTab },
                 onAnimation = { route = AppearanceRoute.Animation },
             )
         }
@@ -119,7 +120,7 @@ fun AppearanceScreen(onBack: () -> Unit) {
                     onDismissed = { route = AppearanceRoute.Root },
                 ) { animatedBack ->
                     when (route) {
-                        AppearanceRoute.Navbar -> NavbarSettingsScreen(onBack = animatedBack)
+                        AppearanceRoute.DefaultTab -> DefaultTabScreen(onBack = animatedBack)
                         AppearanceRoute.Animation -> AnimationSettingsScreen(onBack = animatedBack)
                         AppearanceRoute.Root -> {}
                     }
@@ -130,7 +131,7 @@ fun AppearanceScreen(onBack: () -> Unit) {
 }
 
 @Composable
-private fun AppearanceRoot(onBack: () -> Unit, onNavbar: () -> Unit, onAnimation: () -> Unit) {
+private fun AppearanceRoot(onBack: () -> Unit, onDefaultTab: () -> Unit, onAnimation: () -> Unit) {
     val state = LocalAppState.current
     val scroll = rememberScrollState()
     Box(Modifier.fillMaxSize().background(Letify.colors.bg)) {
@@ -189,7 +190,7 @@ private fun AppearanceRoot(onBack: () -> Unit, onNavbar: () -> Unit, onAnimation
                 )
             }
 
-            // Navbar settings entry
+            // Navigation-related settings entries
             Text(
                 "НАВИГАЦИЯ",
                 color = Letify.colors.muted,
@@ -201,11 +202,11 @@ private fun AppearanceRoot(onBack: () -> Unit, onNavbar: () -> Unit, onAnimation
                 contentPadding = PaddingValues(vertical = 4.dp),
             ) {
                 SettingsRow(
-                    icon = "settings-bold",
+                    icon = "home-2-bold-duotone",
                     iconTile = LetifyColors.TileBlue,
-                    title = "Навбар",
+                    title = "Стартовый экран",
                     value = tabTitle(state.defaultTab),
-                    onClick = onNavbar,
+                    onClick = onDefaultTab,
                 )
                 SettingsRowDivider()
                 SettingsRow(
@@ -312,7 +313,7 @@ private fun transitionStyleTitle(style: TransitionStyle): String = when (style) 
 }
 
 @Composable
-private fun NavbarSettingsScreen(onBack: () -> Unit) {
+private fun DefaultTabScreen(onBack: () -> Unit) {
     val state = LocalAppState.current
     val scroll = rememberScrollState()
     Box(Modifier.fillMaxSize().background(Letify.colors.bg)) {
@@ -323,58 +324,22 @@ private fun NavbarSettingsScreen(onBack: () -> Unit) {
                 .windowInsetsPadding(WindowInsets.statusBars)
                 .padding(top = 6.dp, bottom = 60.dp),
         ) {
-            SettingsHeader(
-                title = "Навбар",
-                onBack = onBack,
-                trailing = { NavbarResetButton(onReset = { state.resetNavbar() }) },
-            )
+            SettingsHeader(title = "Стартовый экран", onBack = onBack)
 
-            // ---- Live navbar preview with long-press drag reorder ------------
-            // The user asked for the actual navbar to be shown on the editor
-            // ("сделай там чтобы отображался сам навбар и пункты можно
-            // перетаскивать внутри него удержанием"). Drag-to-reorder gives the
-            // editor the same shape as the real navbar at the bottom of the app.
+            // Which tab opens by default when the app launches. There used to
+            // be a bottom navbar whose order could be dragged around here too;
+            // now that the navbar is gone, this screen is just this one list.
             Text(
-                "ПОРЯДОК",
+                "ОТКРЫВАТЬ ПРИ ЗАПУСКЕ",
                 color = Letify.colors.muted,
                 style = Letify.typography.labelSmall,
-                modifier = Modifier.padding(start = 28.dp, top = 16.dp, bottom = 10.dp),
-            )
-            Box(
-                Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp)
-                    .padding(bottom = 6.dp),
-                contentAlignment = Alignment.Center,
-            ) {
-                DraggableNavbarPreview()
-            }
-            Box(
-                Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 28.dp)
-                    .padding(top = 4.dp, bottom = 4.dp),
-                contentAlignment = Alignment.Center,
-            ) {
-                Text(
-                    "Нажми и удержи иконку, чтобы перетащить",
-                    color = Letify.colors.muted,
-                    style = Letify.typography.bodySmall,
-                )
-            }
-
-            // ---- Default landing tab -----------------------------------------
-            Text(
-                "СТАРТОВЫЙ ЭКРАН",
-                color = Letify.colors.muted,
-                style = Letify.typography.labelSmall,
-                modifier = Modifier.padding(start = 28.dp, top = 22.dp, bottom = 8.dp),
+                modifier = Modifier.padding(start = 28.dp, top = 16.dp, bottom = 8.dp),
             )
             SettingsCard(
                 modifier = Modifier.screenHPad(),
                 contentPadding = PaddingValues(vertical = 4.dp),
             ) {
-                state.navbarOrder.forEachIndexed { i, tab ->
+                state.tabOrder.forEachIndexed { i, tab ->
                     val active = tab == state.defaultTab
                     SettingsRow(
                         icon = tabIcon(tab),
@@ -401,162 +366,7 @@ private fun NavbarSettingsScreen(onBack: () -> Unit) {
                         },
                         onClick = { state.defaultTab = tab },
                     )
-                    if (i < state.navbarOrder.size - 1) SettingsRowDivider()
-                }
-            }
-        }
-    }
-}
-
-// Top-right reset affordance for the navbar editor header. Restores the
-// factory order + default landing tab in one tap (asked for in n1365 — a
-// "вернуть по умолчанию" button in the header).
-@Composable
-private fun NavbarResetButton(onReset: () -> Unit) {
-    NoFeedbackButton(
-        onClick = onReset,
-        modifier = Modifier.size(44.dp),
-    ) {
-        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            SolarIcon(
-                name = "restart-bold-duotone",
-                tint = Letify.colors.muted,
-                size = 24.dp,
-            )
-        }
-    }
-}
-
-// A 1:1 replica of the actual bottom navbar that lets the user long-press
-// any icon and drag it to a new slot. Layout is identical to the real
-// navbar, just inverted: it sits inside a settings page rather than at
-// the bottom of the screen.
-@Composable
-private fun DraggableNavbarPreview() {
-    val state = LocalAppState.current
-    val haptics = LocalHapticFeedback.current
-    val density = LocalDensity.current
-
-    val itemSize = 56.dp
-    val gap = 6.dp
-    val padding = 8.dp
-    val cornerRadius = 28.dp
-
-    val itemSizePx = with(density) { itemSize.toPx() }
-    val gapPx = with(density) { gap.toPx() }
-    val slotPitchPx = itemSizePx + gapPx
-
-    // Which slot is currently being dragged (-1 = none) and how far it
-    // has been pulled from its slot center.
-    var draggedIndex by remember { mutableIntStateOf(-1) }
-    val dragOffsetPx = remember { mutableFloatStateOf(0f) }
-
-    Box(
-        Modifier
-            .background(
-                color = Letify.colors.container.copy(alpha = 0.94f),
-                shape = RoundedCornerShape(cornerRadius),
-            )
-            .padding(padding),
-    ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            state.navbarOrder.forEachIndexed { i, tab ->
-                if (i > 0) Box(Modifier.width(gap))
-                val isDragged = i == draggedIndex
-                // Slots that aren't being dragged shift gently to make space
-                // when the user drags an icon past their slot center.
-                val sideShift = if (draggedIndex < 0) 0f else {
-                    val from = draggedIndex
-                    val targetFloat = (from + dragOffsetPx.floatValue / slotPitchPx)
-                        .coerceIn(0f, state.navbarOrder.lastIndex.toFloat())
-                    val to = kotlin.math.round(targetFloat).toInt()
-                    when {
-                        i == from -> 0f
-                        from < to && i in (from + 1)..to -> -slotPitchPx
-                        from > to && i in to..(from - 1) -> slotPitchPx
-                        else -> 0f
-                    }
-                }
-                val animShift by animateFloatAsState(
-                    targetValue = sideShift,
-                    animationSpec = spring(
-                        dampingRatio = 0.78f,
-                        stiffness = Spring.StiffnessMediumLow,
-                    ),
-                    label = "shift",
-                )
-                val scale by animateFloatAsState(
-                    targetValue = if (isDragged) 1.12f else 1f,
-                    animationSpec = spring(dampingRatio = 0.7f),
-                    label = "scale",
-                )
-                Box(
-                    Modifier
-                        .size(itemSize)
-                        .zIndex(if (isDragged) 1f else 0f)
-                        .graphicsLayer {
-                            translationX = if (isDragged) dragOffsetPx.floatValue else animShift
-                            scaleX = scale
-                            scaleY = scale
-                        }
-                        .pointerInput(state.navbarOrder.size) {
-                            detectDragGesturesAfterLongPress(
-                                onDragStart = {
-                                    draggedIndex = i
-                                    dragOffsetPx.floatValue = 0f
-                                    haptics.performHapticFeedback(
-                                        HapticFeedbackType.LongPress,
-                                    )
-                                },
-                                onDrag = { change, drag ->
-                                    change.consume()
-                                    val maxLeft = -i * slotPitchPx
-                                    val maxRight = (state.navbarOrder.lastIndex - i) * slotPitchPx
-                                    dragOffsetPx.floatValue =
-                                        (dragOffsetPx.floatValue + drag.x)
-                                            .coerceIn(maxLeft, maxRight)
-                                },
-                                onDragEnd = {
-                                    val from = draggedIndex
-                                    if (from >= 0) {
-                                        val targetFloat = (from + dragOffsetPx.floatValue / slotPitchPx)
-                                            .coerceIn(0f, state.navbarOrder.lastIndex.toFloat())
-                                        val to = kotlin.math.round(targetFloat).toInt()
-                                        if (to != from) {
-                                            val moved = state.navbarOrder.removeAt(from)
-                                            state.navbarOrder.add(to, moved)
-                                            haptics.performHapticFeedback(
-                                                HapticFeedbackType.TextHandleMove,
-                                            )
-                                        }
-                                    }
-                                    draggedIndex = -1
-                                    dragOffsetPx.floatValue = 0f
-                                },
-                                onDragCancel = {
-                                    draggedIndex = -1
-                                    dragOffsetPx.floatValue = 0f
-                                },
-                            )
-                        },
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Box(
-                        Modifier
-                            .size(44.dp)
-                            .background(
-                                color = if (isDragged) Letify.colors.accentSoft
-                                else androidx.compose.ui.graphics.Color.Transparent,
-                                shape = RoundedCornerShape(999.dp),
-                            ),
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        SolarIcon(
-                            name = tabIcon(tab),
-                            tint = if (isDragged) Letify.colors.accent else Letify.colors.text,
-                            size = 26.dp,
-                        )
-                    }
+                    if (i < state.tabOrder.size - 1) SettingsRowDivider()
                 }
             }
         }

@@ -308,7 +308,7 @@ fun LetifyApp() {
             Box(Modifier.fillMaxSize().haze(hazeState)) {
                 CachedTabPager(
                     current = state.currentTab,
-                    order = state.navbarOrder,
+                    order = state.tabOrder,
                     onSettledChange = { tabSettled = it },
                     modifier = Modifier.fillMaxSize(),
                 ) { tab ->

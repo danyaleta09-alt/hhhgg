@@ -81,24 +81,23 @@ fun ProfileScreen(
     // camera container-transform grows from exactly this rect.
 
     ScreenScaffold(topPadding = 0.dp) {
-        Row(
-            Modifier.fillMaxWidth().screenHPad().padding(top = 4.dp, bottom = 4.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            NoFeedbackButton(onClick = onBack) {
-                Text("←", color = Letify.colors.text, style = Letify.typography.titleLarge)
-            }
-        }
-        // Pencil edit button anchored top-right with no surrounding plate.
-        // Sits flush with the status bar — matches Telegram's profile
-        // header where the chrome row hugs the top edge.
+        // Header row: back button (start) and edit-pencil (end) share one row,
+        // flush with the status bar, like a typical screen header. Previously
+        // these were two separate stacked rows, which dropped the pencil
+        // ~40dp below the back arrow instead of aligning with it.
         Box(
             Modifier
                 .fillMaxWidth()
-                .padding(start = 14.dp, end = 14.dp, top = 0.dp),
-            contentAlignment = Alignment.CenterEnd,
+                .screenHPad()
+                .padding(top = 4.dp, bottom = 4.dp),
         ) {
-            NoFeedbackButton(onClick = onEditProfile, modifier = Modifier.size(44.dp)) {
+            NoFeedbackButton(onClick = onBack, modifier = Modifier.align(Alignment.CenterStart)) {
+                Text("←", color = Letify.colors.text, style = Letify.typography.titleLarge)
+            }
+            NoFeedbackButton(
+                onClick = onEditProfile,
+                modifier = Modifier.align(Alignment.CenterEnd).size(44.dp),
+            ) {
                 Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
                     SolarIcon(name = "pen-outline", tint = Letify.colors.text, size = 24.dp)
                 }
@@ -119,15 +118,15 @@ fun ProfileScreen(
                 state.fetchTelegramPhoto(tgUser.id)
             }
         }
-        Box(Modifier.fillMaxWidth().padding(top = 0.dp), contentAlignment = Alignment.Center) {
+        Box(Modifier.fillMaxWidth().padding(top = 6.dp), contentAlignment = Alignment.Center) {
             Box(
                 Modifier
-                    .size(108.dp)
+                    .size(88.dp)
                     .clip(CircleShape)
                     .background(Letify.colors.accentSoft, CircleShape),
                 contentAlignment = Alignment.Center,
             ) {
-                SolarIcon(name = "user-outline", tint = Letify.colors.accent, size = 56.dp)
+                SolarIcon(name = "user-outline", tint = Letify.colors.accent, size = 46.dp)
                 if (!photoUrl.isNullOrBlank()) {
                     AsyncImage(
                         model = ImageRequest.Builder(context)
