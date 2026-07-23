@@ -9,6 +9,8 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.camera.core.Camera
 import androidx.camera.core.CameraSelector
+import androidx.camera.camera2.interop.Camera2CameraInfo
+import androidx.camera.camera2.interop.ExperimentalCamera2Interop
 import androidx.camera.core.ImageCapture
 import androidx.camera.core.ImageCaptureException
 import androidx.camera.core.Preview
@@ -65,10 +67,13 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
@@ -98,6 +103,7 @@ private const val LENS_FADE_MS = 130
 /** Never fully blank the feed on lens-flip — dip and recover instead of flashing to black. */
 private const val LENS_FADE_MIN_ALPHA = 0.35f
 
+@OptIn(ExperimentalCamera2Interop::class)
 @Composable
 fun CameraCaptureScreen(
     onBack: () -> Unit,
@@ -166,13 +172,24 @@ fun CameraCaptureScreen(
     var zoomRatio by remember { mutableFloatStateOf(1f) }
     var minZoom by remember { mutableFloatStateOf(1f) }
     var maxZoom by remember { mutableFloatStateOf(1f) }
-    // Tools island: flash / timer / zoom / exposure toggle
+    // Ultra-wide is often a *separate* lens (minZoom stays 1.0 on main).
+    var useUltraWide by remember { mutableStateOf(false) }
+    var ultraWideAvailable by remember { mutableStateOf(false) }
+    // Tools island: flash / timer / zoom / exposure / dual
     var toolsOpen by remember { mutableStateOf(false) }
     var showExposure by remember { mutableStateOf(false) }
     var flashMode by remember { mutableIntStateOf(ImageCapture.FLASH_MODE_OFF) }
     var timerSec by remember { mutableIntStateOf(0) } // 0, 3, 10
     var timerRemaining by remember { mutableIntStateOf(0) }
     var recordSeconds by remember { mutableIntStateOf(0) }
+    // Video lock (Telegram-style): drag to padlock while holding to keep recording.
+    var recordingLocked by remember { mutableStateOf(false) }
+    var lockArmed by remember { mutableStateOf(false) }
+    // Dual-camera: concurrent front+back when the device supports it.
+    var dualMode by remember { mutableStateOf(false) }
+    var dualSupported by remember { mutableStateOf(false) }
+    var pipOffset by remember { mutableStateOf(Offset(48f, 160f)) } // px inside preview
+    var secondaryPreviewView by remember { mutableStateOf<PreviewView?>(null) }
 
     LaunchedEffect(isRecording) {
         if (isRecording) {
@@ -181,6 +198,9 @@ fun CameraCaptureScreen(
                 delay(1000)
                 recordSeconds++
             }
+        } else {
+            recordingLocked = false
+            lockArmed = false
         }
     }
 
@@ -203,7 +223,10 @@ fun CameraCaptureScreen(
 
     // Bind only while readyToBind (after open slide settles). Fade-in waits
     // for StreamState.STREAMING so the first painted frame eases in.
-    DisposableEffect(readyToBind, lensFacing, previewView, lifecycleOwner, bindGeneration, hasCamera) {
+    DisposableEffect(
+        readyToBind, lensFacing, previewView, lifecycleOwner,
+        bindGeneration, hasCamera, useUltraWide, dualMode, secondaryPreviewView,
+    ) {
         val view = previewView
         if (!readyToBind || view == null || !hasCamera) {
             onDispose { }
@@ -212,8 +235,8 @@ fun CameraCaptureScreen(
             val future = CameraPrewarm.future(context)
             var provider: ProcessCameraProvider? = null
             var boundPreview: Preview? = null
+            var boundSecondaryPreview: Preview? = null
             var cancelled = false
-            // Reveal only when the first camera frame is actually painting.
             val streamObserver = Observer<PreviewView.StreamState> { state ->
                 if (!cancelled && state == PreviewView.StreamState.STREAMING) {
                     scope.launch {
@@ -227,31 +250,106 @@ fun CameraCaptureScreen(
                 if (cancelled) return@addListener
                 try {
                     provider = future.get()
-                    val preview = Preview.Builder().build().also { p ->
-                        p.setSurfaceProvider(view.surfaceProvider)
+                    val p = provider ?: return@addListener
+
+                    val backInfos = p.availableCameraInfos.filter {
+                        it.lensFacing == CameraSelector.LENS_FACING_BACK
                     }
-                    boundPreview = preview
-                    val selector = CameraSelector.Builder()
-                        .requireLensFacing(lensFacing)
-                        .build()
-                    provider?.unbindAll()
-                    if (cancelled) return@addListener
-                    val cam = provider?.bindToLifecycle(
-                        lifecycleOwner,
-                        selector,
-                        preview,
-                        imageCapture,
-                        videoCapture,
+                    ultraWideAvailable = backInfos.size > 1 || backInfos.any { info ->
+                        runCatching {
+                            val focals = Camera2CameraInfo.from(info).getCameraCharacteristic(
+                                android.hardware.camera2.CameraCharacteristics
+                                    .LENS_INFO_AVAILABLE_FOCAL_LENGTHS,
+                            )
+                            (focals?.minOrNull() ?: 99f) < 2.5f
+                        }.getOrDefault(false)
+                    }
+                    dualSupported = p.availableConcurrentCameraInfos.any { combo ->
+                        combo.any { it.lensFacing == CameraSelector.LENS_FACING_BACK } &&
+                            combo.any { it.lensFacing == CameraSelector.LENS_FACING_FRONT }
+                    }
+
+                    fun selectorFor(facing: Int, ultra: Boolean): CameraSelector {
+                        val b = CameraSelector.Builder().requireLensFacing(facing)
+                        if (ultra && facing == CameraSelector.LENS_FACING_BACK) {
+                            b.addCameraFilter { infos ->
+                                val sorted = infos.sortedBy { info ->
+                                    runCatching {
+                                        Camera2CameraInfo.from(info).getCameraCharacteristic(
+                                            android.hardware.camera2.CameraCharacteristics
+                                                .LENS_INFO_AVAILABLE_FOCAL_LENGTHS,
+                                        )?.minOrNull() ?: 99f
+                                    }.getOrDefault(99f)
+                                }
+                                listOfNotNull(sorted.firstOrNull())
+                            }
+                        }
+                        return b.build()
+                    }
+
+                    val selector = selectorFor(
+                        lensFacing,
+                        useUltraWide && lensFacing == CameraSelector.LENS_FACING_BACK,
                     )
+                    val preview = Preview.Builder().build().also { pr ->
+                        boundPreview = pr
+                        pr.setSurfaceProvider(view.surfaceProvider)
+                    }
+
+                    p.unbindAll()
+                    if (cancelled) return@addListener
+
+                    val secView = secondaryPreviewView
+                    val canDual = dualMode && dualSupported && secView != null
+                    val cam: Camera? = if (canDual) {
+                        val secondaryFacing =
+                            if (lensFacing == CameraSelector.LENS_FACING_BACK)
+                                CameraSelector.LENS_FACING_FRONT
+                            else CameraSelector.LENS_FACING_BACK
+                        val secSelector = selectorFor(secondaryFacing, false)
+                        val secPreview = Preview.Builder().build().also { pr ->
+                            boundSecondaryPreview = pr
+                            pr.setSurfaceProvider(secView.surfaceProvider)
+                        }
+                        try {
+                            val primaryConfig = androidx.camera.core.ConcurrentCamera.SingleCameraConfig(
+                                selector,
+                                androidx.camera.core.UseCaseGroup.Builder()
+                                    .addUseCase(preview)
+                                    .addUseCase(imageCapture)
+                                    .addUseCase(videoCapture)
+                                    .build(),
+                                lifecycleOwner,
+                            )
+                            val secondaryConfig = androidx.camera.core.ConcurrentCamera.SingleCameraConfig(
+                                secSelector,
+                                androidx.camera.core.UseCaseGroup.Builder()
+                                    .addUseCase(secPreview)
+                                    .build(),
+                                lifecycleOwner,
+                            )
+                            val concurrent = p.bindToLifecycle(listOf(primaryConfig, secondaryConfig))
+                            concurrent.cameras.firstOrNull {
+                                it.cameraInfo.lensFacing == lensFacing
+                            }
+                        } catch (e: Exception) {
+                            Log.w(TAG, "concurrent bind failed, falling back", e)
+                            dualMode = false
+                            p.bindToLifecycle(lifecycleOwner, selector, preview, imageCapture, videoCapture)
+                        }
+                    } else {
+                        p.bindToLifecycle(lifecycleOwner, selector, preview, imageCapture, videoCapture)
+                    }
+
                     if (cancelled) {
-                        try { provider?.unbindAll() } catch (_: Exception) {}
+                        try { p.unbindAll() } catch (_: Exception) {}
                         return@addListener
                     }
                     boundCamera = cam
                     val zState = cam?.cameraInfo?.zoomState?.value
                     minZoom = zState?.minZoomRatio ?: 1f
                     maxZoom = zState?.maxZoomRatio ?: 1f
-                    val zr = zoomRatio.coerceIn(minZoom, maxZoom)
+                    val zr = if (useUltraWide) 1f else zoomRatio.coerceIn(minZoom, maxZoom)
                     zoomRatio = zr
                     cam?.cameraControl?.setZoomRatio(zr)
                     imageCapture.flashMode = flashMode
@@ -267,7 +365,6 @@ fun CameraCaptureScreen(
                         exposureMin = 0
                         exposureMax = 0
                     }
-                    // Do NOT fade here — wait for streamObserver / STREAMING.
                 } catch (e: Exception) {
                     if (!cancelled) Log.e(TAG, "bind failed", e)
                 }
@@ -275,12 +372,10 @@ fun CameraCaptureScreen(
 
             onDispose {
                 cancelled = true
-                // Snapshot the last live frame for the next Telegram-style open.
-                runCatching {
-                    CameraPrewarm.savePlaceholder(context, view.bitmap)
-                }
+                runCatching { CameraPrewarm.savePlaceholder(context, view.bitmap) }
                 view.previewStreamState.removeObserver(streamObserver)
                 try { boundPreview?.setSurfaceProvider(null) } catch (_: Exception) {}
+                try { boundSecondaryPreview?.setSurfaceProvider(null) } catch (_: Exception) {}
                 try { provider?.unbindAll() } catch (_: Exception) {}
                 boundCamera = null
             }
@@ -401,6 +496,9 @@ fun CameraCaptureScreen(
     fun stopVideo() {
         activeRecording?.stop()
         activeRecording = null
+        isRecording = false
+        recordingLocked = false
+        lockArmed = false
     }
 
     fun flipCamera() {
@@ -451,9 +549,34 @@ fun CameraCaptureScreen(
     }
 
     fun setZoom(ratio: Float) {
+        // 0.6× on most phones is a separate ultra-wide lens, not a zoom ratio.
+        if (ratio < 0.95f && ultraWideAvailable) {
+            if (!useUltraWide) {
+                useUltraWide = true
+                zoomRatio = 1f
+                bindGeneration++
+            }
+            return
+        }
+        if (useUltraWide) {
+            useUltraWide = false
+            zoomRatio = 1f
+            bindGeneration++
+            return
+        }
         val r = ratio.coerceIn(minZoom, maxZoom)
         zoomRatio = r
         runCatching { boundCamera?.cameraControl?.setZoomRatio(r) }
+    }
+
+    fun toggleDual() {
+        if (!dualSupported && !dualMode) {
+            // Still flip UI so user sees the attempt; bind will no-op if unsupported.
+            // Prefer enabling only when supported.
+            return
+        }
+        dualMode = !dualMode
+        bindGeneration++
     }
 
     // Telegram-style layout: preview card sits BELOW the status bar with a
@@ -622,32 +745,47 @@ fun CameraCaptureScreen(
                 }
             }
 
-            // Tools island — compact card under the dots button.
-            if (toolsOpen) {
+            // Tools island — animated scale+fade from the dots button.
+            FadeScaleVisibility(
+                visible = toolsOpen,
+                enter = fadeIn(tween(180)) + scaleIn(
+                    initialScale = 0.86f,
+                    animationSpec = tween(200),
+                    transformOrigin = TransformOrigin(1f, 0f),
+                ),
+                exit = fadeOut(tween(120)) + scaleOut(
+                    targetScale = 0.86f,
+                    animationSpec = tween(140),
+                    transformOrigin = TransformOrigin(1f, 0f),
+                ),
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .padding(top = 56.dp, end = 12.dp),
+            ) {
                 CameraToolsIsland(
                     flashMode = flashMode,
                     timerSec = timerSec,
-                    minZoom = minZoom,
+                    ultraWideAvailable = ultraWideAvailable,
+                    useUltraWide = useUltraWide,
                     zoomRatio = zoomRatio,
                     showExposure = showExposure,
                     exposureSupported = exposureMax > exposureMin,
+                    dualMode = dualMode,
+                    dualSupported = dualSupported,
                     onFlash = { cycleFlash() },
                     onTimer = { cycleTimer() },
-                    onZoom = { setZoom(it) },
+                    onZoomUltra = { setZoom(0.6f) },
+                    onZoom1x = { setZoom(1f) },
                     onExposureToggle = {
                         showExposure = !showExposure
-                        if (!showExposure) {
-                            // Reset EV when hiding
-                            setExposure(0)
-                        }
+                        if (showExposure) toolsOpen = false // free the right edge for the rail
+                        if (!showExposure) setExposure(0)
                     },
-                    modifier = Modifier
-                        .align(Alignment.TopEnd)
-                        .padding(top = 56.dp, end = 12.dp),
+                    onDual = { toggleDual() },
                 )
             }
 
-            // Exposure rail — only when enabled from the island.
+            // Exposure rail on the LEFT so it never overlaps the island.
             if (showExposure && boundCamera != null && exposureMax > exposureMin) {
                 ExposureRail(
                     index = exposureIndex,
@@ -655,12 +793,55 @@ fun CameraCaptureScreen(
                     max = exposureMax,
                     onChange = { setExposure(it) },
                     modifier = Modifier
-                        .align(Alignment.CenterEnd)
-                        .padding(end = 10.dp),
+                        .align(Alignment.CenterStart)
+                        .padding(start = 10.dp),
                 )
             }
 
-            // Timer countdown — large center numeral while waiting.
+            // Dual-camera PIP — draggable circle with the secondary feed.
+            if (dualMode && dualSupported) {
+                val pipSize = 112.dp
+                Box(
+                    Modifier
+                        .offset {
+                            IntOffset(pipOffset.x.toInt(), pipOffset.y.toInt())
+                        }
+                        .size(pipSize)
+                        .clip(CircleShape)
+                        .background(Color.Black, CircleShape)
+                        .pointerInput(Unit) {
+                            detectDragGestures { change, drag ->
+                                change.consume()
+                                pipOffset = Offset(
+                                    (pipOffset.x + drag.x).coerceAtLeast(0f),
+                                    (pipOffset.y + drag.y).coerceAtLeast(0f),
+                                )
+                            }
+                        },
+                ) {
+                    AndroidView(
+                        factory = { ctx ->
+                            PreviewView(ctx).apply {
+                                layoutParams = ViewGroup.LayoutParams(
+                                    ViewGroup.LayoutParams.MATCH_PARENT,
+                                    ViewGroup.LayoutParams.MATCH_PARENT,
+                                )
+                                scaleType = PreviewView.ScaleType.FILL_CENTER
+                                implementationMode = PreviewView.ImplementationMode.COMPATIBLE
+                            }.also { secondaryPreviewView = it }
+                        },
+                        modifier = Modifier.fillMaxSize(),
+                    )
+                    // Thin white ring
+                    Box(
+                        Modifier
+                            .fillMaxSize()
+                            .border(2.dp, Color.White.copy(alpha = 0.85f), CircleShape),
+                    )
+                }
+            }
+
+            // Timer countdown
             if (timerRemaining > 0) {
                 Box(
                     Modifier
@@ -687,116 +868,171 @@ fun CameraCaptureScreen(
                 .padding(horizontal = 28.dp)
                 .padding(top = 18.dp, bottom = 16.dp),
         ) {
-            // Last shot thumbnail (bottom-left) — stays on camera after capture
-            Box(
-                Modifier
-                    .align(Alignment.CenterStart)
-                    .size(48.dp),
-            ) {
-                FadeScaleVisibility(
-                    visible = lastThumb != null,
-                    enter = fadeIn(tween(180)) + scaleIn(initialScale = 0.7f, animationSpec = tween(180)),
-                    exit = fadeOut(),
+            // Left: thumbnail OR lock target while recording (Telegram-style).
+            if (isRecording && !recordingLocked) {
+                val lockScale = if (lockArmed) 1.15f else 1f
+                NoFeedbackButton(
+                    onClick = {
+                        recordingLocked = true
+                        lockArmed = false
+                    },
+                    modifier = Modifier
+                        .align(Alignment.CenterStart)
+                        .size(52.dp)
+                        .graphicsLayer { scaleX = lockScale; scaleY = lockScale },
                 ) {
-                    Box {
-                        val path = lastThumb
-                        if (path != null) {
-                            AsyncImage(
-                                model = ImageRequest.Builder(context)
-                                    .data(Uri.fromFile(File(path)))
-                                    .size(160)
-                                    // Crossfade between successive thumbnails so a new
-                                    // shot eases in over the old one instead of
-                                    // popping in abruptly once decoded.
-                                    .crossfade(220)
-                                    .build(),
-                                contentDescription = null,
-                                contentScale = ContentScale.Crop,
-                                modifier = Modifier
-                                    .fillMaxSize()
-                                    .clip(RoundedCornerShape(12.dp))
-                                    .border(1.5.dp, Color.White.copy(alpha = 0.7f), RoundedCornerShape(12.dp)),
+                    Box(
+                        Modifier
+                            .fillMaxSize()
+                            .background(
+                                if (lockArmed) Color.White.copy(alpha = 0.28f)
+                                else Color.White.copy(alpha = 0.12f),
+                                CircleShape,
                             )
-                        }
-                        // Shot counter — how many photos/videos taken this session.
-                        if (sessionCaptureCount > 0) {
-                            Box(
-                                Modifier
-                                    .align(Alignment.TopEnd)
-                                    .offset(x = 6.dp, y = (-6).dp)
-                                    .background(Color.Black.copy(alpha = 0.75f), CircleShape)
-                                    .border(1.dp, Color.White.copy(alpha = 0.85f), CircleShape)
-                                    .padding(horizontal = 5.dp, vertical = 2.dp),
-                                contentAlignment = Alignment.Center,
-                            ) {
-                                Text(
-                                    if (sessionCaptureCount > 99) "99+" else sessionCaptureCount.toString(),
-                                    color = Color.White,
-                                    fontWeight = FontWeight.SemiBold,
-                                    fontSize = 10.sp,
-                                )
-                            }
+                            .border(
+                                width = if (lockArmed) 2.dp else 1.dp,
+                                color = if (lockArmed) Color.White else Color.White.copy(alpha = 0.35f),
+                                shape = CircleShape,
+                            ),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Text("🔒", fontSize = 20.sp)
+                    }
+                }
+            } else if (!isRecording) {
+                // Last shot thumbnail (bottom-left)
+                Box(
+                    Modifier
+                        .align(Alignment.CenterStart)
+                        .size(48.dp)
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(Color.White.copy(alpha = 0.1f)),
+                ) {
+                    val thumb = lastThumb
+                    if (thumb != null) {
+                        AsyncImage(
+                            model = ImageRequest.Builder(context)
+                                .data(thumb)
+                                .crossfade(true)
+                                .build(),
+                            contentDescription = null,
+                            contentScale = ContentScale.Crop,
+                            modifier = Modifier.fillMaxSize(),
+                        )
+                    }
+                    if (sessionCaptureCount > 0) {
+                        Box(
+                            Modifier
+                                .align(Alignment.TopEnd)
+                                .offset(x = 6.dp, y = (-6).dp)
+                                .size(18.dp)
+                                .background(Color.White, CircleShape),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Text(
+                                sessionCaptureCount.toString(),
+                                color = Color.Black,
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.Bold,
+                            )
                         }
                     }
                 }
             }
 
-            // Shutter — outer ring stays put, inner shape morphs circle → rounded
-            // square while recording, plus a light press-in for tactile feedback.
-            run {
-                var pressed by remember { mutableStateOf(false) }
-                val pressScale by animateFloatAsState(
-                    if (pressed) 0.92f else 1f,
-                    label = "shutterPress",
-                )
-                val innerSize by animateDpAsState(
-                    if (isRecording) 30.dp else 58.dp,
-                    label = "shutterInnerSize",
-                )
-                val innerColor by animateColorAsState(
-                    if (isRecording) Color.Red else Color.White,
-                    label = "shutterInnerColor",
-                )
-                val innerShape = if (isRecording) RoundedCornerShape(9.dp) else CircleShape
+            // Shutter — center. Long-press records; drag left toward lock to arm.
+            val shutterColor by animateColorAsState(
+                targetValue = when {
+                    isRecording && recordingLocked -> Color(0xFFE53935)
+                    isRecording -> Color(0xFFE53935)
+                    else -> Color.White
+                },
+                label = "shutter",
+            )
+            val innerShape = if (isRecording && recordingLocked) RoundedCornerShape(8.dp)
+            else if (isRecording) RoundedCornerShape(10.dp)
+            else CircleShape
+            val innerSize = if (isRecording) 28.dp else 58.dp
 
-                Box(
-                    Modifier
-                        .align(Alignment.Center)
-                        .size(76.dp)
-                        .graphicsLayer { scaleX = pressScale; scaleY = pressScale }
-                        .border(3.dp, Color.White.copy(alpha = 0.9f), CircleShape)
-                        .pointerInput(boundCamera) {
-                            detectTapGestures(
-                                onTap = { takePhoto() },
-                                onLongPress = { startVideo() },
-                                onPress = {
-                                    pressed = true
-                                    tryAwaitRelease()
-                                    pressed = false
-                                    if (isRecording) stopVideo()
-                                },
-                            )
-                        },
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Box(Modifier.size(innerSize).background(innerColor, innerShape))
-                }
-            }
-
-            // Flip camera — bottom-right
-            NoFeedbackButton(
-                onClick = { flipCamera() },
-                modifier = Modifier
-                    .align(Alignment.CenterEnd)
-                    .size(48.dp),
+            Box(
+                Modifier
+                    .align(Alignment.Center)
+                    .size(74.dp)
+                    .border(3.dp, Color.White, CircleShape)
+                    .pointerInput(isRecording, recordingLocked) {
+                        // Track absolute position to detect slide-to-lock.
+                        detectTapGestures(
+                            onTap = {
+                                when {
+                                    isRecording && recordingLocked -> stopVideo()
+                                    !isRecording -> takePhoto()
+                                }
+                            },
+                            onLongPress = {
+                                if (!isRecording) startVideo()
+                            },
+                            onPress = {
+                                if (isRecording && recordingLocked) return@detectTapGestures
+                                val released = tryAwaitRelease()
+                                if (isRecording && !recordingLocked) {
+                                    if (lockArmed) {
+                                        recordingLocked = true
+                                        lockArmed = false
+                                    } else {
+                                        stopVideo()
+                                    }
+                                }
+                            },
+                        )
+                    }
+                    .pointerInput(isRecording, recordingLocked) {
+                        if (!isRecording || recordingLocked) return@pointerInput
+                        detectDragGestures(
+                            onDragEnd = {
+                                if (lockArmed) {
+                                    recordingLocked = true
+                                    lockArmed = false
+                                }
+                            },
+                            onDrag = { change, _ ->
+                                change.consume()
+                                // Finger moved left toward the lock zone (left half of bar).
+                                val x = change.position.x
+                                // Local to shutter: negative X = toward left / lock.
+                                lockArmed = change.position.x < -20f ||
+                                    change.previousPosition.x < -40f
+                                // Use absolute root position via history
+                                val totalX = change.position.x
+                                // Approximate: if user drags left more than 40px, arm lock
+                                lockArmed = totalX < -36f
+                            },
+                        )
+                    },
+                contentAlignment = Alignment.Center,
             ) {
                 Box(
                     Modifier
-                        .fillMaxSize()
-                        .background(Color.White.copy(alpha = 0.15f), CircleShape),
-                    contentAlignment = Alignment.Center,
+                        .size(innerSize)
+                        .background(shutterColor, innerShape),
+                )
+            }
+
+            // Flip camera — bottom-right (hidden while recording)
+            if (!isRecording) {
+                NoFeedbackButton(
+                    onClick = { flipCamera() },
+                    modifier = Modifier
+                        .align(Alignment.CenterEnd)
+                        .size(48.dp),
                 ) {
-                    SolarIcon(name = "restart-bold", tint = Color.White, size = 22.dp)
+                    Box(
+                        Modifier
+                            .fillMaxSize()
+                            .background(Color.White.copy(alpha = 0.15f), CircleShape),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        SolarIcon(name = "restart-bold", tint = Color.White, size = 22.dp)
+                    }
                 }
             }
         }
@@ -815,20 +1051,25 @@ fun CameraCaptureScreen(
 }
 
 /**
- * Floating tools island — flash, timer, zoom, exposure toggle.
+ * Floating tools island — flash, timer, zoom, exposure, dual-camera.
  */
 @Composable
 private fun CameraToolsIsland(
     flashMode: Int,
     timerSec: Int,
-    minZoom: Float,
+    ultraWideAvailable: Boolean,
+    useUltraWide: Boolean,
     zoomRatio: Float,
     showExposure: Boolean,
     exposureSupported: Boolean,
+    dualMode: Boolean,
+    dualSupported: Boolean,
     onFlash: () -> Unit,
     onTimer: () -> Unit,
-    onZoom: (Float) -> Unit,
+    onZoomUltra: () -> Unit,
+    onZoom1x: () -> Unit,
     onExposureToggle: () -> Unit,
+    onDual: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val flashLabel = when (flashMode) {
@@ -841,13 +1082,12 @@ private fun CameraToolsIsland(
         10 -> "10 с"
         else -> "Выкл"
     }
-    val hasUltra = minZoom < 0.95f
 
     Column(
         modifier = modifier
-            .width(168.dp)
-            .background(Color.Black.copy(alpha = 0.72f), RoundedCornerShape(18.dp))
-            .padding(vertical = 6.dp),
+            .width(196.dp)
+            .background(Color.Black.copy(alpha = 0.78f), RoundedCornerShape(22.dp))
+            .padding(vertical = 8.dp),
     ) {
         ToolsRow(
             icon = "fire-outline",
@@ -863,27 +1103,28 @@ private fun CameraToolsIsland(
             active = timerSec > 0,
             onClick = onTimer,
         )
-        // Zoom row — chips
+        // Zoom with icon
         Row(
             Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 12.dp, vertical = 8.dp),
+                .padding(horizontal = 14.dp, vertical = 10.dp),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween,
         ) {
-            Text("Зум", color = Color.White.copy(alpha = 0.7f), fontSize = 13.sp)
+            SolarIcon(name = "camera-bold-duotone", tint = Color.White.copy(alpha = 0.85f), size = 18.dp)
+            Spacer(Modifier.width(10.dp))
+            Text("Зум", color = Color.White, fontSize = 14.sp, modifier = Modifier.weight(1f))
             Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                if (hasUltra) {
+                if (ultraWideAvailable) {
                     ZoomChip(
-                        label = String.format("%.1f×", minZoom).replace(',', '.'),
-                        selected = zoomRatio <= (minZoom + 1f) / 2f,
-                        onClick = { onZoom(minZoom) },
+                        label = "0.6×",
+                        selected = useUltraWide,
+                        onClick = onZoomUltra,
                     )
                 }
                 ZoomChip(
                     label = "1×",
-                    selected = zoomRatio in 0.95f..1.15f || (!hasUltra && zoomRatio < 1.5f),
-                    onClick = { onZoom(1f.coerceIn(minZoom, maxOf(minZoom, 1f))) },
+                    selected = !useUltraWide && zoomRatio in 0.9f..1.2f,
+                    onClick = onZoom1x,
                 )
             }
         }
@@ -896,6 +1137,19 @@ private fun CameraToolsIsland(
                 onClick = onExposureToggle,
             )
         }
+        ToolsRow(
+            icon = "user-circle-bold-duotone",
+            title = "Две камеры",
+            value = when {
+                dualMode -> "Вкл"
+                !dualSupported -> "Н/Д"
+                else -> "Выкл"
+            },
+            active = dualMode,
+            onClick = {
+                if (dualSupported) onDual()
+            },
+        )
     }
 }
 
@@ -911,7 +1165,7 @@ private fun ToolsRow(
         Row(
             Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 12.dp, vertical = 10.dp),
+                .padding(horizontal = 14.dp, vertical = 12.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             SolarIcon(
@@ -923,13 +1177,13 @@ private fun ToolsRow(
             Text(
                 title,
                 color = Color.White,
-                fontSize = 13.sp,
+                fontSize = 14.sp,
                 modifier = Modifier.weight(1f),
             )
             Text(
                 value,
                 color = if (active) Color(0xFFFFD60A) else Color.White.copy(alpha = 0.55f),
-                fontSize = 12.sp,
+                fontSize = 13.sp,
                 fontWeight = FontWeight.SemiBold,
             )
         }
@@ -949,7 +1203,7 @@ private fun ZoomChip(
                     if (selected) Color.White else Color.White.copy(alpha = 0.12f),
                     RoundedCornerShape(999.dp),
                 )
-                .padding(horizontal = 10.dp, vertical = 5.dp),
+                .padding(horizontal = 11.dp, vertical = 6.dp),
         ) {
             Text(
                 label,

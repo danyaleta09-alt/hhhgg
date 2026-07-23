@@ -12,8 +12,8 @@ android {
         applicationId = "com.letify.app"
         minSdk = 26
         targetSdk = 34
-        versionCode = 183
-        versionName = "r183-camera-tools-island"
+        versionCode = 184
+        versionName = "r184-camera-tools-lock-dual"
         vectorDrawables { useSupportLibrary = true }
     }
 
