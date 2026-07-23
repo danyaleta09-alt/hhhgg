@@ -543,6 +543,8 @@ private fun OverlayContent(
     onPushSleep: () -> Unit = {},
     onPushBindings: () -> Unit = {},
     onOpenCameraExpand: () -> Unit = {},
+    onPushNutrition: () -> Unit = {},
+    onPushWaterHistory: () -> Unit = {},
 ) {
     when (current) {
         is AddOverlay.Habit -> AddHabitScreen(onBack = animatedBack, editId = current.editId)
@@ -550,8 +552,8 @@ private fun OverlayContent(
         AddOverlay.Nutrition -> AddNutritionScreen(onBack = animatedBack)
         AddOverlay.NutritionHub -> NutritionScreen(
             onBack = animatedBack,
-            onAddMeal = { /* push add meal from hub — handled via parent if needed */ },
-            onWaterHistory = {},
+            onAddMeal = onPushNutrition,
+            onWaterHistory = onPushWaterHistory,
         )
         AddOverlay.Sleep -> AddSleepScreen(onBack = animatedBack)
         AddOverlay.Weight -> {} // weight is a bottom-sheet, handled elsewhere

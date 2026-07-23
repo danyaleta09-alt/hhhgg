@@ -244,7 +244,7 @@ private fun NowBlock(tasksToday: List<TaskItem>, nowMin: Int, dateKey: String) {
             )
             Spacer(Modifier.height(6.dp))
             Text(
-                next.title,
+                next.name,
                 color = Letify.colors.text,
                 style = Letify.typography.titleMedium,
                 fontWeight = FontWeight.Medium,
