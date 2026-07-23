@@ -541,8 +541,8 @@ fun CameraCaptureScreen(
 
     fun cycleTimer() {
         timerSec = when (timerSec) {
-            0 -> 3
-            3 -> 10
+            0 -> 5
+            5 -> 10
             else -> 0
         }
     }
@@ -720,19 +720,6 @@ fun CameraCaptureScreen(
                 ) {
                     SolarIcon(name = "alt-arrow-left-outline", tint = Color.White, size = 20.dp)
                 }
-            }
-
-            // Exposure rail — left side of the frame.
-            if (showExposure && boundCamera != null && exposureMax > exposureMin) {
-                ExposureRail(
-                    index = exposureIndex,
-                    min = exposureMin,
-                    max = exposureMax,
-                    onChange = { setExposure(it) },
-                    modifier = Modifier
-                        .align(Alignment.CenterStart)
-                        .padding(start = 10.dp),
-                )
             }
 
             // Dual-camera PIP — draggable circle.
@@ -959,30 +946,35 @@ fun CameraCaptureScreen(
             }
         }
 
-        // Tools menu lives in the freed bottom strip (no ⋯ button).
-        CameraToolsIsland(
+        // Horizontal icon-only tools row (no container).
+        CameraToolsBar(
             flashMode = flashMode,
             timerSec = timerSec,
             ultraWideAvailable = ultraWideAvailable,
             useUltraWide = useUltraWide,
-            zoomRatio = zoomRatio,
             showExposure = showExposure,
             exposureSupported = exposureMax > exposureMin,
+            exposureIndex = exposureIndex,
+            exposureMin = exposureMin,
+            exposureMax = exposureMax,
             dualMode = dualMode,
             dualSupported = dualSupported,
+            accent = state.accent,
             onFlash = { cycleFlash() },
             onTimer = { cycleTimer() },
-            onZoomUltra = { setZoom(0.6f) },
-            onZoom1x = { setZoom(1f) },
+            onZoom = {
+                if (useUltraWide || !ultraWideAvailable) setZoom(1f) else setZoom(0.6f)
+            },
             onExposureToggle = {
                 showExposure = !showExposure
                 if (!showExposure) setExposure(0)
             },
+            onExposureChange = { setExposure(it) },
             onDual = { toggleDual() },
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 16.dp)
-                .padding(top = 12.dp, bottom = 6.dp),
+                .padding(horizontal = 20.dp)
+                .padding(top = 10.dp, bottom = 4.dp),
         )
 
         Text(
@@ -992,7 +984,7 @@ fun CameraCaptureScreen(
             } else {
                 "Тап — фото · Удерживай — видео"
             },
-            color = Color.White.copy(alpha = 0.45f),
+            color = Color.White.copy(alpha = 0.4f),
             fontSize = 11.sp,
             modifier = Modifier
                 .align(Alignment.CenterHorizontally)
@@ -1002,178 +994,154 @@ fun CameraCaptureScreen(
 }
 
 /**
- * Floating tools island — flash, timer, zoom, exposure, dual-camera.
+ * Bottom tools: icon-only horizontal row, no container.
+ * Brightness opens a tailed horizontal slider bubble above the sun icon.
+ * Other tools cycle on each tap; active = accent tint.
  */
 @Composable
-private fun CameraToolsIsland(
+private fun CameraToolsBar(
     flashMode: Int,
     timerSec: Int,
     ultraWideAvailable: Boolean,
     useUltraWide: Boolean,
-    zoomRatio: Float,
     showExposure: Boolean,
     exposureSupported: Boolean,
+    exposureIndex: Int,
+    exposureMin: Int,
+    exposureMax: Int,
     dualMode: Boolean,
     dualSupported: Boolean,
+    accent: Color,
     onFlash: () -> Unit,
     onTimer: () -> Unit,
-    onZoomUltra: () -> Unit,
-    onZoom1x: () -> Unit,
+    onZoom: () -> Unit,
     onExposureToggle: () -> Unit,
+    onExposureChange: (Int) -> Unit,
     onDual: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val flashLabel = when (flashMode) {
-        ImageCapture.FLASH_MODE_ON -> "Вкл"
-        ImageCapture.FLASH_MODE_AUTO -> "Авто"
-        else -> "Выкл"
-    }
-    val timerLabel = when (timerSec) {
-        3 -> "3 с"
-        10 -> "10 с"
-        else -> "Выкл"
-    }
+    val flashActive = flashMode != ImageCapture.FLASH_MODE_OFF
+    val timerActive = timerSec > 0
+    val zoomActive = useUltraWide
+    val dualActive = dualMode
 
-    Column(
-        modifier = modifier
-            .background(Color(0xFF1A1A1A), RoundedCornerShape(20.dp))
-            .padding(vertical = 4.dp),
-    ) {
-        ToolsRow(
-            icon = "fire-outline",
-            title = "Вспышка",
-            value = flashLabel,
-            active = flashMode != ImageCapture.FLASH_MODE_OFF,
-            onClick = onFlash,
-        )
-        ToolsRow(
-            icon = "stopwatch-bold-duotone",
-            title = "Таймер",
-            value = timerLabel,
-            active = timerSec > 0,
-            onClick = onTimer,
-        )
-        // Zoom with icon
+    Box(modifier = modifier) {
+        // Exposure bubble sits above the icon row, aligned to brightness slot.
+        if (showExposure && exposureSupported && exposureMax > exposureMin) {
+            ExposureBubble(
+                index = exposureIndex,
+                min = exposureMin,
+                max = exposureMax,
+                accent = accent,
+                onChange = onExposureChange,
+                modifier = Modifier
+                    .align(Alignment.TopCenter)
+                    .padding(bottom = 8.dp)
+                    .offset(y = (-52).dp),
+            )
+        }
+
         Row(
             Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 14.dp, vertical = 10.dp),
+                .align(Alignment.BottomCenter)
+                .padding(top = if (showExposure) 56.dp else 0.dp),
+            horizontalArrangement = Arrangement.SpaceEvenly,
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            SolarIcon(name = "camera-bold-duotone", tint = Color.White.copy(alpha = 0.85f), size = 18.dp)
-            Spacer(Modifier.width(10.dp))
-            Text("Зум", color = Color.White, fontSize = 14.sp, modifier = Modifier.weight(1f))
-            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                if (ultraWideAvailable) {
-                    ZoomChip(
-                        label = "0.6×",
-                        selected = useUltraWide,
-                        onClick = onZoomUltra,
-                    )
-                }
-                ZoomChip(
-                    label = "1×",
-                    selected = !useUltraWide && zoomRatio in 0.9f..1.2f,
-                    onClick = onZoom1x,
+            ToolIcon(
+                icon = "fire-outline",
+                active = flashActive,
+                accent = accent,
+                badge = when (flashMode) {
+                    ImageCapture.FLASH_MODE_ON -> "1"
+                    ImageCapture.FLASH_MODE_AUTO -> "A"
+                    else -> null
+                },
+                onClick = onFlash,
+            )
+            ToolIcon(
+                icon = "stopwatch-bold-duotone",
+                active = timerActive,
+                accent = accent,
+                badge = if (timerSec > 0) "${timerSec}" else null,
+                onClick = onTimer,
+            )
+            if (ultraWideAvailable) {
+                ToolIcon(
+                    icon = "camera-bold-duotone",
+                    active = zoomActive,
+                    accent = accent,
+                    badge = if (useUltraWide) "0.6" else "1×",
+                    onClick = onZoom,
                 )
             }
-        }
-        if (exposureSupported) {
-            ToolsRow(
-                icon = "sun-bold",
-                title = "Яркость",
-                value = if (showExposure) "Откр." else "Закр.",
-                active = showExposure,
-                onClick = onExposureToggle,
+            if (exposureSupported) {
+                ToolIcon(
+                    icon = "sun-bold",
+                    active = showExposure || exposureIndex != 0,
+                    accent = accent,
+                    onClick = onExposureToggle,
+                )
+            }
+            ToolIcon(
+                icon = "user-circle-bold-duotone",
+                active = dualActive,
+                accent = accent,
+                dimmed = !dualSupported,
+                onClick = { if (dualSupported) onDual() },
             )
         }
-        ToolsRow(
-            icon = "user-circle-bold-duotone",
-            title = "Две камеры",
-            value = when {
-                dualMode -> "Вкл"
-                !dualSupported -> "Н/Д"
-                else -> "Выкл"
-            },
-            active = dualMode,
-            onClick = {
-                if (dualSupported) onDual()
-            },
-        )
     }
 }
 
 @Composable
-private fun ToolsRow(
+private fun ToolIcon(
     icon: String,
-    title: String,
-    value: String,
     active: Boolean,
+    accent: Color,
     onClick: () -> Unit,
-) {
-    NoFeedbackButton(onClick = onClick, modifier = Modifier.fillMaxWidth()) {
-        Row(
-            Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 14.dp, vertical = 12.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            SolarIcon(
-                name = icon,
-                tint = if (active) Color.White else Color.White.copy(alpha = 0.75f),
-                size = 18.dp,
-            )
-            Spacer(Modifier.width(10.dp))
-            Text(
-                title,
-                color = Color.White,
-                fontSize = 14.sp,
-                modifier = Modifier.weight(1f),
-            )
-            Text(
-                value,
-                color = if (active) Color(0xFFFFD60A) else Color.White.copy(alpha = 0.55f),
-                fontSize = 13.sp,
-                fontWeight = FontWeight.SemiBold,
-            )
-        }
-    }
-}
-
-@Composable
-private fun ZoomChip(
-    label: String,
-    selected: Boolean,
-    onClick: () -> Unit,
+    badge: String? = null,
+    dimmed: Boolean = false,
 ) {
     NoFeedbackButton(onClick = onClick) {
         Box(
-            Modifier
-                .background(
-                    if (selected) Color.White else Color.White.copy(alpha = 0.12f),
-                    RoundedCornerShape(999.dp),
-                )
-                .padding(horizontal = 11.dp, vertical = 6.dp),
+            Modifier.size(44.dp),
+            contentAlignment = Alignment.Center,
         ) {
-            Text(
-                label,
-                color = if (selected) Color.Black else Color.White,
-                fontSize = 12.sp,
-                fontWeight = FontWeight.SemiBold,
+            SolarIcon(
+                name = icon,
+                tint = when {
+                    dimmed -> Color.White.copy(alpha = 0.28f)
+                    active -> accent
+                    else -> Color.White.copy(alpha = 0.92f)
+                },
+                size = 26.dp,
             )
+            if (badge != null) {
+                Text(
+                    text = badge,
+                    color = if (active) accent else Color.White.copy(alpha = 0.85f),
+                    fontSize = 9.sp,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier
+                        .align(Alignment.BottomEnd)
+                        .offset(x = 2.dp, y = 2.dp),
+                )
+            }
         }
     }
 }
 
 /**
- * Vertical exposure rail — float thumb, integer EV only when step changes.
- * Apply is instant on the host so the feed updates in real time.
+ * Horizontal exposure slider in a dark bubble with a bottom tail.
  */
 @Composable
-private fun ExposureRail(
+private fun ExposureBubble(
     index: Int,
     min: Int,
     max: Int,
+    accent: Color,
     onChange: (Int) -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -1194,75 +1162,86 @@ private fun ExposureRail(
         onChange(min + kotlin.math.round(clamped * range).toInt())
     }
 
-    Column(
-        modifier = modifier
-            .width(44.dp)
-            .background(Color.Black.copy(alpha = 0.35f), RoundedCornerShape(16.dp))
-            .padding(vertical = 12.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-    ) {
-        SolarIcon(name = "sun-bold", tint = Color.White.copy(alpha = 0.95f), size = 16.dp)
-        Spacer(Modifier.height(10.dp))
-        BoxWithConstraints(
+    Column(modifier = modifier, horizontalAlignment = Alignment.CenterHorizontally) {
+        Row(
             Modifier
-                .width(40.dp)
-                .height(160.dp)
-                .pointerInput(min, max) {
-                    detectTapGestures { offset ->
-                        val y = offset.y.coerceIn(0f, size.height.toFloat())
-                        applyFrac(1f - y / size.height.toFloat())
-                    }
-                }
-                .pointerInput(min, max) {
-                    detectDragGestures(
-                        onDragStart = { dragging = true },
-                        onDragEnd = { dragging = false },
-                        onDragCancel = { dragging = false },
-                        onDrag = { change, _ ->
-                            change.consume()
-                            val y = change.position.y.coerceIn(0f, size.height.toFloat())
-                            applyFrac(1f - y / size.height.toFloat())
-                        },
-                    )
-                },
+                .width(220.dp)
+                .background(Color(0xEE1C1C1E), RoundedCornerShape(16.dp))
+                .padding(horizontal = 14.dp, vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
         ) {
-            val thumbR = 8.dp
-            val travel = maxHeight - thumbR * 2
-            // Track
-            Box(
+            SolarIcon(name = "sun-outline", tint = Color.White.copy(alpha = 0.55f), size = 16.dp)
+            BoxWithConstraints(
                 Modifier
-                    .align(Alignment.Center)
-                    .width(4.dp)
-                    .fillMaxHeight()
-                    .background(Color.White.copy(alpha = 0.22f), RoundedCornerShape(999.dp)),
-            )
-            // Active fill from bottom to thumb
-            Box(
-                Modifier
-                    .align(Alignment.BottomCenter)
-                    .width(4.dp)
-                    .fillMaxHeight(visualFrac)
-                    .background(Color.White.copy(alpha = 0.7f), RoundedCornerShape(999.dp)),
-            )
-            Box(
-                Modifier
-                    .align(Alignment.TopCenter)
-                    .size(thumbR * 2)
-                    .graphicsLayer {
-                        translationY = travel.toPx() * (1f - visualFrac)
+                    .weight(1f)
+                    .height(28.dp)
+                    .pointerInput(min, max) {
+                        detectTapGestures { offset ->
+                            applyFrac(offset.x / size.width.toFloat())
+                        }
                     }
-                    .background(Color.White, CircleShape),
+                    .pointerInput(min, max) {
+                        detectDragGestures(
+                            onDragStart = { dragging = true },
+                            onDragEnd = { dragging = false },
+                            onDragCancel = { dragging = false },
+                            onDrag = { change, _ ->
+                                change.consume()
+                                applyFrac(change.position.x / size.width.toFloat())
+                            },
+                        )
+                    },
+            ) {
+                val thumbR = 8.dp
+                val travel = maxWidth - thumbR * 2
+                // Track
+                Box(
+                    Modifier
+                        .align(Alignment.CenterStart)
+                        .fillMaxWidth()
+                        .height(3.dp)
+                        .background(Color.White.copy(alpha = 0.2f), RoundedCornerShape(999.dp)),
+                )
+                // Active fill
+                Box(
+                    Modifier
+                        .align(Alignment.CenterStart)
+                        .fillMaxWidth(visualFrac.coerceIn(0.02f, 1f))
+                        .height(3.dp)
+                        .background(accent, RoundedCornerShape(999.dp)),
+                )
+                // Thumb
+                Box(
+                    Modifier
+                        .align(Alignment.CenterStart)
+                        .size(thumbR * 2)
+                        .graphicsLayer {
+                            translationX = travel.toPx() * visualFrac
+                        }
+                        .background(Color.White, CircleShape),
+                )
+            }
+            Text(
+                text = if (index > 0) "+$index" else "$index",
+                color = Color.White.copy(alpha = 0.7f),
+                fontSize = 12.sp,
+                fontWeight = FontWeight.Medium,
+                modifier = Modifier.width(28.dp),
             )
         }
-        Spacer(Modifier.height(8.dp))
-        // Numeric EV hint
-        val ev = index - ((min + max) / 2) // rough; better show raw index bias
-        Text(
-            text = if (index > 0) "+$index" else "$index",
-            color = Color.White.copy(alpha = 0.7f),
-            fontSize = 11.sp,
-            fontWeight = FontWeight.Medium,
-        )
+        // Tail pointing down toward the sun icon
+        androidx.compose.foundation.Canvas(
+            Modifier.size(width = 16.dp, height = 8.dp),
+        ) {
+            val p = androidx.compose.ui.graphics.Path().apply {
+                moveTo(0f, 0f)
+                lineTo(size.width, 0f)
+                lineTo(size.width / 2f, size.height)
+                close()
+            }
+            drawPath(p, Color(0xEE1C1C1E))
+        }
     }
 }
 

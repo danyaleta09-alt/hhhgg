@@ -12,8 +12,8 @@ android {
         applicationId = "com.letify.app"
         minSdk = 26
         targetSdk = 34
-        versionCode = 186
-        versionName = "r186-camera-syntax-fix"
+        versionCode = 187
+        versionName = "r187-camera-icon-tools"
         vectorDrawables { useSupportLibrary = true }
     }
 
