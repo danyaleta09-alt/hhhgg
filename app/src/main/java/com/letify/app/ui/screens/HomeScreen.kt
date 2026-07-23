@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -26,8 +27,12 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
+import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.Velocity
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.airbnb.lottie.LottieComposition
@@ -46,12 +51,18 @@ import java.time.LocalTime
 import java.time.format.TextStyle
 import java.util.Locale
 
+/** Blocks vertical nested-scroll from parent while user is paging horizontally. */
+private val BlockVerticalNestedScroll = object : NestedScrollConnection {
+    override suspend fun onPostFling(consumed: Velocity, available: Velocity): Velocity =
+        available // consume leftover vertical fling so parent doesn't jump
+}
+
 @Composable
 fun HomeScreen(
     onAddWeight: () -> Unit = {},
     onOpenNutrition: () -> Unit = {},
     onAddSleep: () -> Unit = {},
-    onAddMeal: () -> Unit = {},
+    @Suppress("UNUSED_PARAMETER") onAddMeal: () -> Unit = {},
 ) {
     val state = LocalAppState.current
     val overall = state.overallProgress()
@@ -85,7 +96,7 @@ fun HomeScreen(
                 Modifier
                     .fillMaxWidth()
                     .screenHPad()
-                    .padding(top = 10.dp, bottom = 4.dp),
+                    .padding(top = 10.dp, bottom = 6.dp),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically,
             ) {
@@ -102,65 +113,78 @@ fun HomeScreen(
             }
         },
     ) {
-        // Greeting
-        Column(Modifier.screenHPad().padding(top = 8.dp, bottom = 4.dp)) {
-            Text(greet, color = Letify.colors.muted, style = Letify.typography.bodyMedium)
-            Spacer(Modifier.height(4.dp))
+        // Greeting — same scale as prototype
+        Column(Modifier.screenHPad().padding(top = 10.dp, bottom = 6.dp)) {
+            Text(
+                greet,
+                color = Letify.colors.muted,
+                style = Letify.typography.bodyLarge,
+            )
+            Spacer(Modifier.height(6.dp))
             Text(
                 state.userName.ifBlank { "друг" },
                 color = Letify.colors.text,
                 style = Letify.typography.displayLarge,
+                fontSize = 32.sp,
             )
         }
 
-        // Swipeable: day progress / AI tips
-        HorizontalPager(
-            state = pagerState,
-            modifier = Modifier.fillMaxWidth(),
-        ) { page ->
-            Column(
-                Modifier
-                    .fillMaxWidth()
-                    .padding(vertical = 18.dp),
-                horizontalAlignment = Alignment.CenterHorizontally,
-            ) {
-                when (page) {
-                    0 -> {
-                        DayRing(progress = overall, size = 132.dp)
-                        Spacer(Modifier.height(12.dp))
-                        Text(
-                            "прогресс за день",
-                            color = Letify.colors.muted,
-                            style = Letify.typography.bodySmall,
-                        )
-                    }
-                    else -> {
-                        Column(
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                            modifier = Modifier.padding(horizontal = 36.dp),
-                        ) {
-                            Text(
-                                "ИИ · скоро",
-                                color = Letify.colors.accent,
-                                style = Letify.typography.labelSmall,
-                                modifier = Modifier
-                                    .clip(RoundedCornerShape(99.dp))
-                                    .background(Letify.colors.accent.copy(alpha = 0.14f))
-                                    .padding(horizontal = 10.dp, vertical = 4.dp),
-                            )
-                            Spacer(Modifier.height(14.dp))
-                            Text(
-                                "Выпей воды — до цели осталось пол-литра. После ужина лучше лёгкая прогулка.",
-                                color = Letify.colors.text,
-                                style = Letify.typography.titleSmall,
-                                modifier = Modifier.fillMaxWidth(),
-                            )
-                            Spacer(Modifier.height(12.dp))
-                            Text(
-                                "советы появятся здесь",
-                                color = Letify.colors.muted,
-                                style = Letify.typography.bodySmall,
-                            )
+        // Fixed-height pager — no height jump, no vertical scroll steal
+        Box(
+            Modifier
+                .fillMaxWidth()
+                .height(220.dp)
+                .nestedScroll(BlockVerticalNestedScroll),
+        ) {
+            HorizontalPager(
+                state = pagerState,
+                modifier = Modifier.fillMaxSize(),
+            ) { page ->
+                Box(
+                    Modifier.fillMaxSize(),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    when (page) {
+                        0 -> {
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                DayRing(progress = overall, size = 148.dp)
+                                Spacer(Modifier.height(14.dp))
+                                Text(
+                                    "прогресс за день",
+                                    color = Letify.colors.muted,
+                                    style = Letify.typography.bodyMedium,
+                                )
+                            }
+                        }
+                        else -> {
+                            Column(
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                modifier = Modifier.padding(horizontal = 32.dp),
+                            ) {
+                                Text(
+                                    "ИИ · скоро",
+                                    color = Letify.colors.accent,
+                                    style = Letify.typography.labelMedium,
+                                    modifier = Modifier
+                                        .clip(RoundedCornerShape(99.dp))
+                                        .background(Letify.colors.accent.copy(alpha = 0.14f))
+                                        .padding(horizontal = 12.dp, vertical = 5.dp),
+                                )
+                                Spacer(Modifier.height(16.dp))
+                                Text(
+                                    "Выпей воды — до цели осталось пол-литра. После ужина лучше лёгкая прогулка.",
+                                    color = Letify.colors.text,
+                                    style = Letify.typography.titleMedium,
+                                    textAlign = TextAlign.Center,
+                                    modifier = Modifier.fillMaxWidth(),
+                                )
+                                Spacer(Modifier.height(12.dp))
+                                Text(
+                                    "советы появятся здесь",
+                                    color = Letify.colors.muted,
+                                    style = Letify.typography.bodySmall,
+                                )
+                            }
                         }
                     }
                 }
@@ -171,30 +195,32 @@ fun HomeScreen(
         Row(
             Modifier
                 .fillMaxWidth()
-                .padding(bottom = 16.dp),
+                .padding(top = 4.dp, bottom = 20.dp),
             horizontalArrangement = Arrangement.Center,
+            verticalAlignment = Alignment.CenterVertically,
         ) {
             repeat(2) { i ->
                 val on = pagerState.currentPage == i
                 Box(
                     Modifier
                         .padding(horizontal = 3.dp)
-                        .size(height = 6.dp, width = if (on) 16.dp else 6.dp)
+                        .height(6.dp)
+                        .width(if (on) 18.dp else 6.dp)
                         .clip(RoundedCornerShape(99.dp))
                         .background(
                             if (on) Letify.colors.accent
-                            else Color.White.copy(alpha = 0.15f),
+                            else Color.White.copy(alpha = 0.18f),
                         ),
                 )
             }
         }
 
-        // Cards
+        // Cards — larger, matching prototype proportions
         Row(
             Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 28.dp),
-            horizontalArrangement = Arrangement.spacedBy(10.dp),
+                .padding(horizontal = 20.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             CompactCard(
                 modifier = Modifier.weight(1f),
@@ -211,7 +237,7 @@ fun HomeScreen(
                 composition = coke,
                 title = "Вода",
                 progress = waterProgress,
-                progressLabel = "${state.waterMl} мл из ${state.waterTarget}",
+                progressLabel = formatWater(state.waterMl, state.waterTarget),
                 barColor = LetifyColors.Water,
                 buttonColor = LetifyColors.Water,
                 onAdd = { state.addWater(250, "Вода", "water") },
@@ -222,34 +248,45 @@ fun HomeScreen(
         Row(
             Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 28.dp)
-                .padding(top = 22.dp, bottom = 16.dp),
+                .padding(horizontal = 24.dp)
+                .padding(top = 28.dp, bottom = 20.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
         ) {
             Column {
-                Text("Сон", color = Letify.colors.muted, style = Letify.typography.bodySmall)
-                Spacer(Modifier.height(4.dp))
+                Text("Сон", color = Letify.colors.muted, style = Letify.typography.bodyMedium)
+                Spacer(Modifier.height(6.dp))
                 val sleep = state.sleepLog.maxByOrNull { it.dateKey }
                 val sleepText = sleep?.let {
                     val m = it.durationMinutes
                     "${m / 60} ч ${m % 60} м"
                 } ?: "—"
                 NoFeedbackButton(onClick = onAddSleep) {
-                    Text(sleepText, color = Letify.colors.text, style = Letify.typography.titleMedium)
+                    Text(sleepText, color = Letify.colors.text, style = Letify.typography.titleLarge)
                 }
             }
             Column(horizontalAlignment = Alignment.End) {
-                Text("Вес", color = Letify.colors.muted, style = Letify.typography.bodySmall)
-                Spacer(Modifier.height(4.dp))
+                Text("Вес", color = Letify.colors.muted, style = Letify.typography.bodyMedium)
+                Spacer(Modifier.height(6.dp))
                 NoFeedbackButton(onClick = onAddWeight) {
                     Text(
                         String.format("%.1f кг", state.weight).replace('.', ','),
                         color = Letify.colors.text,
-                        style = Letify.typography.titleMedium,
+                        style = Letify.typography.titleLarge,
                     )
                 }
             }
         }
+    }
+}
+
+private fun formatWater(ml: Int, target: Int): String {
+    // Prefer liters when values are large; keep readable
+    return if (target >= 1000 || ml >= 1000) {
+        val cur = String.format("%.2f", ml / 1000f).trimEnd('0').trimEnd('.', ',').replace('.', ',')
+        val goal = String.format("%.1f", target / 1000f).trimEnd('0').trimEnd('.', ',').replace('.', ',')
+        "$cur из $goal л"
+    } else {
+        "$ml мл из $target"
     }
 }
 
@@ -260,7 +297,7 @@ private fun DayRing(progress: Float, size: Dp) {
     val p = progress.coerceIn(0f, 1f)
     Box(Modifier.size(size), contentAlignment = Alignment.Center) {
         Canvas(Modifier.size(size)) {
-            val sw = 8.dp.toPx()
+            val sw = 9.dp.toPx()
             val inset = sw / 2f
             val arcSize = Size(this.size.width - sw, this.size.height - sw)
             val topLeft = Offset(inset, inset)
@@ -287,7 +324,7 @@ private fun DayRing(progress: Float, size: Dp) {
             "${(p * 100).toInt()}%",
             color = Letify.colors.text,
             style = Letify.typography.displayLarge,
-            fontSize = 28.sp,
+            fontSize = 32.sp,
         )
     }
 }
@@ -305,11 +342,10 @@ private fun CompactCard(
 ) {
     Column(
         modifier
-            .clip(RoundedCornerShape(16.dp))
+            .clip(RoundedCornerShape(20.dp))
             .background(Letify.colors.container)
-            .padding(12.dp),
+            .padding(14.dp),
     ) {
-        // icon + title in one row
         Row(
             verticalAlignment = Alignment.CenterVertically,
             modifier = Modifier.fillMaxWidth(),
@@ -317,58 +353,55 @@ private fun CompactCard(
             LottieAnimation(
                 composition = composition,
                 iterations = LottieConstants.IterateForever,
-                modifier = Modifier.size(32.dp),
+                modifier = Modifier.size(40.dp),
             )
-            Spacer(Modifier.width(8.dp))
+            Spacer(Modifier.width(10.dp))
             Text(
                 title,
                 color = Letify.colors.text,
-                style = Letify.typography.titleSmall,
+                style = Letify.typography.titleMedium,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
         }
-        Spacer(Modifier.height(12.dp))
-        // bar
+        Spacer(Modifier.height(14.dp))
         Box(
             Modifier
                 .fillMaxWidth()
-                .height(6.dp)
+                .height(7.dp)
                 .clip(RoundedCornerShape(99.dp))
                 .background(Letify.colors.track),
         ) {
             Box(
                 Modifier
                     .fillMaxWidth(progress.coerceIn(0f, 1f))
-                    .height(6.dp)
+                    .height(7.dp)
                     .background(barColor, RoundedCornerShape(99.dp)),
             )
         }
-        Spacer(Modifier.height(6.dp))
+        Spacer(Modifier.height(8.dp))
         Text(
             progressLabel,
             color = Letify.colors.muted,
-            style = Letify.typography.labelSmall,
+            style = Letify.typography.bodySmall,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
             modifier = Modifier.fillMaxWidth(),
         )
-        Spacer(Modifier.height(10.dp))
-        // thinner button
+        Spacer(Modifier.height(12.dp))
         NoFeedbackButton(onClick = onAdd, modifier = Modifier.fillMaxWidth()) {
             Box(
                 Modifier
                     .fillMaxWidth()
-                    .height(30.dp)
-                    .clip(RoundedCornerShape(9.dp))
+                    .height(36.dp)
+                    .clip(RoundedCornerShape(11.dp))
                     .background(buttonColor),
                 contentAlignment = Alignment.Center,
             ) {
                 Text(
                     "Добавить",
                     color = Color.White,
-                    style = Letify.typography.labelMedium,
-                    fontSize = 12.sp,
+                    style = Letify.typography.labelLarge,
                 )
             }
         }
