@@ -36,7 +36,6 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
-import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -351,19 +350,13 @@ fun CameraCaptureScreen(
     }
 
     Box(Modifier.fillMaxSize().background(Color.Black)) {
-        // Preview — boxed to the actual photo/video aspect ratio (3:4, same
-        // as what addMedia() saves) and rounded, instead of stretching the
-        // feed edge-to-edge across the whole phone screen. The plain black
-        // background above/below is the letterbox.
+        // Preview — near full-bleed, Telegram-style: fills the whole sheet
+        // edge-to-edge with just rounded corners, not a small letterboxed
+        // card floating in the middle of a black screen.
         Box(
             Modifier
-                .align(Alignment.TopCenter)
-                .windowInsetsPadding(WindowInsets.statusBars)
-                .padding(top = 68.dp)
-                .fillMaxWidth(0.94f)
-                .aspectRatio(3f / 4f)
-                .clip(RoundedCornerShape(28.dp))
-                .background(Color(0xFF111111)),
+                .fillMaxSize()
+                .clip(RoundedCornerShape(28.dp)),
         ) {
             if (hasCamera) {
                 AndroidView(
@@ -396,6 +389,7 @@ fun CameraCaptureScreen(
                 exit = fadeOut(tween(120)),
                 modifier = Modifier
                     .align(Alignment.TopCenter)
+                    .windowInsetsPadding(WindowInsets.statusBars)
                     .padding(top = 14.dp),
             ) {
                 Row(
