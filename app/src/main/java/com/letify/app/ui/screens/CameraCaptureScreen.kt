@@ -90,6 +90,7 @@ import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
@@ -149,11 +150,16 @@ fun CameraCaptureScreen(
     val shutterFlash = remember { Animatable(0f) }
     var lastThumb by remember { mutableStateOf<String?>(null) }
     var sessionCaptureCount by remember { mutableIntStateOf(0) }
-    // Telegram-style open: blurred last photo sits under the live feed and
-    // crossfades out once StreamState.STREAMING raises previewAlpha.
-    val placeholderUri = lastThumb
-        ?.let { runCatching { File(it).toURI().toString() }.getOrNull() }
-        ?: state.mediaItems.firstOrNull { !it.isVideo }?.uri
+    // Telegram-style open placeholder. Resolved once per screen mount from:
+    //  1) disk cache written on previous close/capture (most reliable)
+    //  2) newest photo in the media library
+    val placeholderUri = remember {
+        val cache = CameraPrewarm.placeholderFile(context)
+        when {
+            cache.exists() && cache.length() > 64L -> cache.toURI().toString()
+            else -> state.mediaItems.firstOrNull { !it.isVideo }?.uri
+        }
+    }
     // Exposure compensation (яркость кадра) — CameraX EV index.
     var exposureIndex by remember { mutableIntStateOf(0) }
     var exposureMin by remember { mutableIntStateOf(0) }
@@ -261,6 +267,10 @@ fun CameraCaptureScreen(
 
             onDispose {
                 cancelled = true
+                // Snapshot the last live frame for the next Telegram-style open.
+                runCatching {
+                    CameraPrewarm.savePlaceholder(context, view.bitmap)
+                }
                 view.previewStreamState.removeObserver(streamObserver)
                 try { boundPreview?.setSurfaceProvider(null) } catch (_: Exception) {}
                 try { provider?.unbindAll() } catch (_: Exception) {}
@@ -304,6 +314,7 @@ fun CameraCaptureScreen(
                         lastThumb = file.absolutePath
                         sessionCaptureCount++
                     }
+                    CameraPrewarm.savePlaceholderFromFile(context, file.absolutePath)
                 }
 
                 override fun onError(exception: ImageCaptureException) {
@@ -345,6 +356,8 @@ fun CameraCaptureScreen(
                                 )
                                 lastThumb = file.absolutePath
                                 sessionCaptureCount++
+                                // Video thumb is still a useful open-placeholder.
+                                CameraPrewarm.savePlaceholderFromFile(context, file.absolutePath)
                             } else {
                                 Log.e(TAG, "video finalize error: ${event.error}", event.cause)
                                 runCatching { file.delete() }
@@ -379,13 +392,20 @@ fun CameraCaptureScreen(
         }
     }
 
+    // Job used to throttle HAL writes — applying EV every drag pixel was what
+    // made the rail stutter and the exposure jump in steps.
+    var exposureJob by remember { mutableStateOf<Job?>(null) }
+
     fun setExposure(index: Int) {
         if (exposureMax <= exposureMin) return
         val idx = index.coerceIn(exposureMin, exposureMax)
-        if (idx == exposureIndex) return
         exposureIndex = idx
-        runCatching {
-            boundCamera?.cameraControl?.setExposureCompensationIndex(idx)
+        exposureJob?.cancel()
+        exposureJob = scope.launch {
+            delay(32) // ~30 Hz max to the camera HAL
+            runCatching {
+                boundCamera?.cameraControl?.setExposureCompensationIndex(exposureIndex)
+            }
         }
     }
 
@@ -412,28 +432,29 @@ fun CameraCaptureScreen(
             //  2) Live PreviewView mounts after settle, alpha 0.
             //  3) StreamState.STREAMING → previewAlpha 0→1, blur fades out.
             val liveA = previewAlpha.value
+            // Blurred still is visible for the whole open (and until live
+            // fully fades in). Uses disk-cached last frame so it shows even
+            // on the first composition of a fresh CameraCaptureScreen.
             if (placeholderUri != null && liveA < 0.995f) {
                 AsyncImage(
                     model = ImageRequest.Builder(context)
                         .data(placeholderUri)
-                        // Low-res decode → soft when upscaled; cheap "blur"
-                        // even on API < 31 where Modifier.blur is a no-op.
-                        .size(180)
+                        .size(360)
                         .crossfade(false)
+                        .allowHardware(false)
                         .build(),
                     contentDescription = null,
                     contentScale = ContentScale.Crop,
                     modifier = Modifier
                         .fillMaxSize()
-                        .blur(28.dp)
-                        .graphicsLayer { alpha = 1f - liveA },
+                        .blur(22.dp)
+                        .graphicsLayer { alpha = (1f - liveA).coerceIn(0f, 1f) },
                 )
-                // Slight dark veil so the soft plate reads as a placeholder,
-                // not a sharp photo stuck under the feed.
+                // Very light veil — enough to read as "preview", not a black plate.
                 Box(
                     Modifier
                         .fillMaxSize()
-                        .background(Color.Black.copy(alpha = 0.18f * (1f - liveA))),
+                        .background(Color.Black.copy(alpha = 0.06f * (1f - liveA))),
                 )
             }
             if (hasCamera && readyToBind) {
@@ -684,8 +705,9 @@ fun CameraCaptureScreen(
 }
 
 /**
- * Vertical exposure (EV / яркость) rail — drag up to brighten, down to darken.
- * Index maps 1:1 to CameraX CameraControl.setExposureCompensationIndex.
+ * Vertical exposure rail. Thumb follows the finger in *float* space every
+ * frame (smooth); integer EV is reported via [onChange] only when the
+ * quantised index actually changes (host throttles HAL writes further).
  */
 @Composable
 private fun ExposureRail(
@@ -696,8 +718,26 @@ private fun ExposureRail(
     modifier: Modifier = Modifier,
 ) {
     val range = (max - min).coerceAtLeast(1)
-    // 1 at top (bright) … 0 at bottom (dark)
-    val fraction = ((index - min).toFloat() / range).coerceIn(0f, 1f)
+    // Local visual 0..1 so the thumb doesn't quantise to EV steps while dragging.
+    var visualFrac by remember(min, max) {
+        mutableFloatStateOf(((index - min).toFloat() / range).coerceIn(0f, 1f))
+    }
+    // Keep visual in sync when exposure is changed externally (lens flip etc.).
+    LaunchedEffect(index, min, max) {
+        val target = ((index - min).toFloat() / range).coerceIn(0f, 1f)
+        // Don't fight an active drag — only snap when the host index moved
+        // without us reporting it (difference > half a step).
+        if (kotlin.math.abs(target - visualFrac) > 0.5f / range) {
+            visualFrac = target
+        }
+    }
+
+    fun applyFrac(f: Float) {
+        val clamped = f.coerceIn(0f, 1f)
+        visualFrac = clamped
+        val idx = min + kotlin.math.round(clamped * range).toInt()
+        onChange(idx)
+    }
 
     Column(
         modifier = modifier.width(40.dp),
@@ -711,9 +751,8 @@ private fun ExposureRail(
                 .height(152.dp)
                 .pointerInput(min, max) {
                     detectTapGestures { offset ->
-                        val clamped = offset.y.coerceIn(0f, size.height.toFloat())
-                        val f = (1f - clamped / size.height.toFloat()).coerceIn(0f, 1f)
-                        onChange(min + kotlin.math.round(f * range).toInt())
+                        val y = offset.y.coerceIn(0f, size.height.toFloat())
+                        applyFrac(1f - y / size.height.toFloat())
                     }
                 }
                 .pointerInput(min, max) {
@@ -721,27 +760,28 @@ private fun ExposureRail(
                         onDrag = { change, _ ->
                             change.consume()
                             val y = change.position.y.coerceIn(0f, size.height.toFloat())
-                            val f = (1f - y / size.height.toFloat()).coerceIn(0f, 1f)
-                            onChange(min + kotlin.math.round(f * range).toInt())
+                            applyFrac(1f - y / size.height.toFloat())
                         },
                     )
                 },
         ) {
-            val trackW = 3.dp
             val thumbR = 7.dp
+            val travel = maxHeight - thumbR * 2
             Box(
                 Modifier
                     .align(Alignment.Center)
-                    .width(trackW)
+                    .width(3.dp)
                     .fillMaxHeight()
                     .background(Color.White.copy(alpha = 0.28f), RoundedCornerShape(999.dp)),
             )
-            val thumbY = maxHeight * (1f - fraction)
+            // graphicsLayer translation = no layout thrash while dragging.
             Box(
                 Modifier
                     .align(Alignment.TopCenter)
-                    .padding(top = (thumbY - thumbR).coerceAtLeast(0.dp))
                     .size(thumbR * 2)
+                    .graphicsLayer {
+                        translationY = travel.toPx() * (1f - visualFrac)
+                    }
                     .background(Color.White, CircleShape),
             )
         }
