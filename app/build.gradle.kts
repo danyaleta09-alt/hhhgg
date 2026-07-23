@@ -12,8 +12,8 @@ android {
         applicationId = "com.letify.app"
         minSdk = 26
         targetSdk = 34
-        versionCode = 189
-        versionName = "r189-icon-shutter-fix"
+        versionCode = 190
+        versionName = "r190-wrapcontentsize-import"
         vectorDrawables { useSupportLibrary = true }
     }
 
