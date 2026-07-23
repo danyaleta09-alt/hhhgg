@@ -12,8 +12,8 @@ android {
         applicationId = "com.letify.app"
         minSdk = 26
         targetSdk = 34
-        versionCode = 179
-        versionName = "r179-camera-anim-first"
+        versionCode = 181
+        versionName = "r181-camera-blur-open"
         vectorDrawables { useSupportLibrary = true }
     }
 

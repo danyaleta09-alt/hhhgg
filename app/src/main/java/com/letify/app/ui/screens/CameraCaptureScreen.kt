@@ -33,15 +33,19 @@ import androidx.compose.animation.scaleOut
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -62,6 +66,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
@@ -144,7 +149,15 @@ fun CameraCaptureScreen(
     val shutterFlash = remember { Animatable(0f) }
     var lastThumb by remember { mutableStateOf<String?>(null) }
     var sessionCaptureCount by remember { mutableIntStateOf(0) }
-    var exposureBias by remember { mutableFloatStateOf(0f) }
+    // Telegram-style open: blurred last photo sits under the live feed and
+    // crossfades out once StreamState.STREAMING raises previewAlpha.
+    val placeholderUri = lastThumb
+        ?.let { runCatching { File(it).toURI().toString() }.getOrNull() }
+        ?: state.mediaItems.firstOrNull { !it.isVideo }?.uri
+    // Exposure compensation (яркость кадра) — CameraX EV index.
+    var exposureIndex by remember { mutableIntStateOf(0) }
+    var exposureMin by remember { mutableIntStateOf(0) }
+    var exposureMax by remember { mutableIntStateOf(0) }
     var zoomRatio by remember { mutableFloatStateOf(1f) }
     var recordSeconds by remember { mutableIntStateOf(0) }
 
@@ -231,9 +244,14 @@ fun CameraCaptureScreen(
                     val expState = cam?.cameraInfo?.exposureState
                     if (expState != null && expState.isExposureCompensationSupported) {
                         val range = expState.exposureCompensationRange
-                        val idx = (exposureBias * range.upper.coerceAtLeast(1)).toInt()
-                            .coerceIn(range.lower, range.upper)
+                        exposureMin = range.lower
+                        exposureMax = range.upper
+                        val idx = exposureIndex.coerceIn(range.lower, range.upper)
+                        exposureIndex = idx
                         cam.cameraControl.setExposureCompensationIndex(idx)
+                    } else {
+                        exposureMin = 0
+                        exposureMax = 0
                     }
                     // Do NOT fade here — wait for streamObserver / STREAMING.
                 } catch (e: Exception) {
@@ -361,6 +379,16 @@ fun CameraCaptureScreen(
         }
     }
 
+    fun setExposure(index: Int) {
+        if (exposureMax <= exposureMin) return
+        val idx = index.coerceIn(exposureMin, exposureMax)
+        if (idx == exposureIndex) return
+        exposureIndex = idx
+        runCatching {
+            boundCamera?.cameraControl?.setExposureCompensationIndex(idx)
+        }
+    }
+
     // Telegram-style layout: preview card sits BELOW the status bar with a
     // small gap (not flush against the top edge), mild 14dp rounding, and a
     // dedicated control bar underneath in the black area.
@@ -378,8 +406,36 @@ fun CameraCaptureScreen(
                 .padding(top = 8.dp)
                 .clip(RoundedCornerShape(14.dp)),
         ) {
-            // PreviewView only after open slide settles (readyToBind).
-            // During the open animation this plate stays black — zero HAL.
+            // Telegram open sequence:
+            //  1) Blurred last photo fills the plate (also during the slide-up,
+            //     while readyToBind is still false — zero HAL work).
+            //  2) Live PreviewView mounts after settle, alpha 0.
+            //  3) StreamState.STREAMING → previewAlpha 0→1, blur fades out.
+            val liveA = previewAlpha.value
+            if (placeholderUri != null && liveA < 0.995f) {
+                AsyncImage(
+                    model = ImageRequest.Builder(context)
+                        .data(placeholderUri)
+                        // Low-res decode → soft when upscaled; cheap "blur"
+                        // even on API < 31 where Modifier.blur is a no-op.
+                        .size(180)
+                        .crossfade(false)
+                        .build(),
+                    contentDescription = null,
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .blur(28.dp)
+                        .graphicsLayer { alpha = 1f - liveA },
+                )
+                // Slight dark veil so the soft plate reads as a placeholder,
+                // not a sharp photo stuck under the feed.
+                Box(
+                    Modifier
+                        .fillMaxSize()
+                        .background(Color.Black.copy(alpha = 0.18f * (1f - liveA))),
+                )
+            }
             if (hasCamera && readyToBind) {
                 AndroidView(
                     factory = { ctx ->
@@ -389,14 +445,12 @@ fun CameraCaptureScreen(
                                 ViewGroup.LayoutParams.MATCH_PARENT,
                             )
                             scaleType = PreviewView.ScaleType.FILL_CENTER
-                            // TextureView: correctly transformed by parent
-                            // graphicsLayer during the open slide.
                             implementationMode = PreviewView.ImplementationMode.COMPATIBLE
                         }.also { previewView = it }
                     },
                     modifier = Modifier
                         .fillMaxSize()
-                        .graphicsLayer { alpha = previewAlpha.value },
+                        .graphicsLayer { alpha = liveA },
                 )
             }
 
@@ -477,6 +531,20 @@ fun CameraCaptureScreen(
                 ) {
                     SolarIcon(name = "alt-arrow-left-outline", tint = Color.White, size = 20.dp)
                 }
+            }
+
+            // Exposure compensation (яркость) — vertical rail on the right,
+            // Telegram-style: sun icon + track, drag up = brighter.
+            if (boundCamera != null && exposureMax > exposureMin) {
+                ExposureRail(
+                    index = exposureIndex,
+                    min = exposureMin,
+                    max = exposureMax,
+                    onChange = { setExposure(it) },
+                    modifier = Modifier
+                        .align(Alignment.CenterEnd)
+                        .padding(end = 10.dp),
+                )
             }
         }
 
@@ -612,6 +680,71 @@ fun CameraCaptureScreen(
                 .align(Alignment.CenterHorizontally)
                 .padding(bottom = 10.dp),
         )
+    }
+}
+
+/**
+ * Vertical exposure (EV / яркость) rail — drag up to brighten, down to darken.
+ * Index maps 1:1 to CameraX CameraControl.setExposureCompensationIndex.
+ */
+@Composable
+private fun ExposureRail(
+    index: Int,
+    min: Int,
+    max: Int,
+    onChange: (Int) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val range = (max - min).coerceAtLeast(1)
+    // 1 at top (bright) … 0 at bottom (dark)
+    val fraction = ((index - min).toFloat() / range).coerceIn(0f, 1f)
+
+    Column(
+        modifier = modifier.width(40.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        SolarIcon(name = "sun-bold", tint = Color.White.copy(alpha = 0.9f), size = 18.dp)
+        Spacer(Modifier.height(8.dp))
+        BoxWithConstraints(
+            Modifier
+                .width(36.dp)
+                .height(152.dp)
+                .pointerInput(min, max) {
+                    detectTapGestures { offset ->
+                        val clamped = offset.y.coerceIn(0f, size.height.toFloat())
+                        val f = (1f - clamped / size.height.toFloat()).coerceIn(0f, 1f)
+                        onChange(min + kotlin.math.round(f * range).toInt())
+                    }
+                }
+                .pointerInput(min, max) {
+                    detectDragGestures(
+                        onDrag = { change, _ ->
+                            change.consume()
+                            val y = change.position.y.coerceIn(0f, size.height.toFloat())
+                            val f = (1f - y / size.height.toFloat()).coerceIn(0f, 1f)
+                            onChange(min + kotlin.math.round(f * range).toInt())
+                        },
+                    )
+                },
+        ) {
+            val trackW = 3.dp
+            val thumbR = 7.dp
+            Box(
+                Modifier
+                    .align(Alignment.Center)
+                    .width(trackW)
+                    .fillMaxHeight()
+                    .background(Color.White.copy(alpha = 0.28f), RoundedCornerShape(999.dp)),
+            )
+            val thumbY = maxHeight * (1f - fraction)
+            Box(
+                Modifier
+                    .align(Alignment.TopCenter)
+                    .padding(top = (thumbY - thumbR).coerceAtLeast(0.dp))
+                    .size(thumbR * 2)
+                    .background(Color.White, CircleShape),
+            )
+        }
     }
 }
 
